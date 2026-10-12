@@ -32,4 +32,4 @@ Wordmark: `Motor` in text colour, `Catalog` in brass.
 
 ## Logo
 
-In progress. The direction is a service book with a car on the cover and a wrench above the car. Final assets will land in this folder.
+Chosen concept: a brass service book with an oxblood car on the cover and a light wrench lying flat above the car. The working sketch is [`logo-sketch.svg`](logo-sketch.svg), built for a dark background. A polished set (app icon, favicon, light-mode version) comes next and will land in this folder.
