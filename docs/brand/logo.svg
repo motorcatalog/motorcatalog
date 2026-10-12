@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="t">
+  <title id="t">MotorCatalog: a brass service book with a car on the cover and a wrench above the car</title>
+  <rect x="15.5" y="13.5" width="89" height="93" rx="6.5" fill="#CFA45A" stroke="#8C6A2C" stroke-width="3"/>
+  <rect x="25" y="12" width="3" height="96" fill="#0B0D10"/>
+  <g transform="translate(0 -3)">
+    <circle cx="45" cy="46" r="7.5" fill="#0B0D10"/>
+    <path d="M49 46 L47 49.46 H43 L41 46 L43 42.54 H47 Z" fill="#CFA45A"/>
+    <path d="M50 42.5 Q67 45 84 41.5 V50.5 Q67 47 50 49.5 Z" fill="#0B0D10"/>
+    <circle cx="89" cy="46" r="9" fill="#0B0D10"/>
+    <g transform="rotate(-15 89 46)" fill="#CFA45A">
+      <circle cx="89" cy="46" r="3.5"/>
+      <rect x="89" y="42.5" width="12" height="7"/>
+    </g>
+    <path d="M38 82 V75 L44 72 L54 62 H76 L86 72 L94 74 V82 Z" fill="#A8322A"/>
+    <path d="M38 78 H94 V82 H38 Z" fill="#7E2520"/>
+    <path d="M45.5 71.5 L54.5 62.5 H75.5 L85 71.5" fill="none" stroke="#C9574B" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M56 66 H64 V72 H50 Z M68 66 H74 L80 72 H68 Z" fill="#CFA45A"/>
+    <path d="M66 73 V78" stroke="#7E2520" stroke-width="1.2"/>
+    <rect x="90.5" y="75" width="3.5" height="2.5" rx="0.8" fill="#F4F1EC"/>
+    <rect x="38" y="75" width="2.5" height="2.5" rx="0.6" fill="#E0573F"/>
+    <circle cx="49" cy="83" r="7.75" fill="#CFA45A"/>
+    <circle cx="83" cy="83" r="7.75" fill="#CFA45A"/>
+    <ellipse cx="66" cy="89.5" rx="29" ry="2" fill="#8C6A2C"/>
+    <circle cx="49" cy="83" r="6.5" fill="#0B0D10"/>
+    <circle cx="83" cy="83" r="6.5" fill="#0B0D10"/>
+    <circle cx="49" cy="83" r="2" fill="#CFA45A"/>
+    <circle cx="83" cy="83" r="2" fill="#CFA45A"/>
+  </g>
+</svg>
