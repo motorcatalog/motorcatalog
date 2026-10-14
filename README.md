@@ -101,3 +101,7 @@ Headings (`h1` to `h4`) already use Fraunces. Colours and contrast rules: [`docs
 ## Status
 
 Sprint 1: the scaffold is in place; the first features are next.
+
+## License
+
+[MIT](LICENSE)
