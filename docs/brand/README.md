@@ -47,7 +47,8 @@ The car gets its depth from flat shading, not blur, so it stays crisp at every s
 | `icon-192.png`, `icon-512.png` | Manifest icons, `"purpose": "any"` |
 | `icon-maskable-192.png`, `icon-maskable-512.png` | Manifest icons, `"purpose": "maskable"`, on an oxblood plate |
 | `apple-touch-icon.png` | iOS home screen, 180 px, opaque |
+| [`banner.svg`](banner.svg), `banner.png` | Repo social preview, 1280×640. Upload the PNG under Settings, General, Social preview |
 
 Maskable source: [`logo-maskable.svg`](logo-maskable.svg). The book stays inside the safe zone (measured at 0.39 of the width, limit 0.40). Never combine `any` and `maskable` in one manifest entry.
 
-The wordmark text is converted to outlines, so the lockups render without Fraunces installed.
+The wordmark text is converted to outlines, so the lockups render without Fraunces installed. The banner's tagline is outlined Figtree for the same reason.

@@ -1,4 +1,9 @@
-# MotorCatalog
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/lockup-dark.svg">
+    <img src="docs/brand/lockup-light.svg" alt="MotorCatalog" width="340">
+  </picture>
+</h1>
 
 A digital service book for your car: log maintenance, repairs and costs, and keep the full history in one place.
 
