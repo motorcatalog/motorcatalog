@@ -47,6 +47,8 @@ npm run dev
 
 `npm install` also downloads a Chrome for the browser tests (about 190 MB, once).
 
+We use VS Code. Install the recommended extensions when it asks (Biome, Tailwind CSS IntelliSense and EditorConfig). Biome then formats and sorts imports on save.
+
 | Command | What it does |
 |---|---|
 | `npm run dev` | Start the dev server |
