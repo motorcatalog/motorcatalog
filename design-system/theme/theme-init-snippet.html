@@ -1,0 +1,37 @@
+<!--
+	Inline theme init. Paste this into the <head> of every scaffold's index.html
+	BEFORE any <link rel="stylesheet"> tag.
+
+	Why inline: an external script causes a flash of the wrong theme on first paint
+	because the script runs after the stylesheets are parsed. An inline <script>
+	in <head> runs synchronously and sets data-theme before the page is rendered.
+
+	Rule: stored key (if "light" or "dark") ?? prefers-color-scheme. Nothing is
+	stored until the user picks; an invalid stored value (an old "system", a typo)
+	is removed on first read. Dark when the media query is unsupported.
+
+	The <meta name="color-scheme"> line goes next to the viewport meta, before
+	this script: it tells the browser both schemes are supported, so form
+	controls and scrollbars take the user's scheme before any CSS has loaded.
+-->
+<meta name="color-scheme" content="dark light" />
+<script>
+	(function () {
+		var root = document.documentElement;
+		var theme = null;
+		var palette = null;
+		try {
+			theme = localStorage.getItem("theme");
+			if (theme !== "light" && theme !== "dark") {
+				if (theme !== null) localStorage.removeItem("theme");
+				theme = null;
+			}
+			palette = localStorage.getItem("palette");
+		} catch (e) {}
+		if (!theme) {
+			theme = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+		}
+		root.dataset.theme = theme;
+		root.dataset.palette = palette || "default";
+	})();
+</script>

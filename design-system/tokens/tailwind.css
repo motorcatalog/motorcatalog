@@ -1,0 +1,83 @@
+/* Tailwind bridge (DS 3.9.0). Maps Tailwind's theme namespace onto the design-system
+   tokens so shadcn/ui components paint with the DS colours, fonts and focus ring in
+   both themes and every palette. Spec: docs/specs/2026-10-08-shadcn-web-react-ts.md.
+
+   Rules:
+   - NOT imported by tokens/index.css. The React scaffold's CSS entry imports it,
+     unlayered and after "tailwindcss/theme.css". Browsers ignore @theme, so the file
+     is inert everywhere Tailwind is not installed (web-vite ships it unused).
+   - shadcn's bare names (--background, --primary, --radius ...) are never defined:
+     --accent, --secondary and --radius-* already mean something else in the DS.
+   - `inline` so each utility carries the DS variable itself; a token overridden on
+     a subtree, a palette or a theme still flips it.
+   - Radius, font-sans/mono/serif, text sizes and shadow-xs/sm/md are NOT mapped:
+     the DS declares the same names in a later cascade layer and wins.
+   - Spacing stays Tailwind's.
+   - Every var() here must exist in tokens/*.css; tools/design-system.test.mjs checks. */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+	/* Drop Tailwind's palette: a stray bg-red-500 renders nothing, not a colour the DS does not own. */
+	--color-*: initial;
+	--color-white: #fff;
+	--color-black: #000;
+
+	/* Surfaces and text */
+	--color-background: var(--page-bg);
+	--color-foreground: var(--text);
+	--color-card: var(--card-bg);
+	--color-card-foreground: var(--text);
+	--color-popover: var(--elevated-bg);
+	--color-popover-foreground: var(--text);
+
+	/* Fills. shadcn's "secondary" and "accent" are quiet fills, not the brand hues. */
+	--color-primary: var(--accent-solid);
+	--color-primary-foreground: var(--on-accent);
+	--color-secondary: var(--interactive-bg);
+	--color-secondary-foreground: var(--text);
+	--color-muted: var(--interactive-bg);
+	--color-muted-foreground: var(--text-muted);
+	--color-accent: var(--accent-ghost);
+	--color-accent-foreground: var(--text);
+	--color-destructive: var(--danger);
+	--color-destructive-foreground: var(--on-accent);
+
+	/* Edges. --color-input is the SC 1.4.11 control boundary, not the decorative border. */
+	--color-border: var(--border);
+	--color-input: var(--control-border);
+	--color-ring: var(--accent-strong);
+
+	/* DS extras shadcn does not name */
+	--color-success: var(--success);
+	--color-success-soft: var(--success-soft);
+	--color-warning: var(--warning);
+	--color-warning-soft: var(--warning-soft);
+	--color-info: var(--info);
+	--color-info-soft: var(--info-soft);
+	--color-danger: var(--danger);
+	--color-danger-soft: var(--danger-soft);
+	--color-brand-secondary: var(--secondary);
+	--color-brand-secondary-soft: var(--secondary-soft);
+
+	/* Charts */
+	--color-chart-1: var(--accent);
+	--color-chart-2: var(--secondary);
+	--color-chart-3: var(--success);
+	--color-chart-4: var(--warning);
+	--color-chart-5: var(--info);
+
+	/* Sidebar, so the component works if a project adds it */
+	--color-sidebar: var(--panel-bg);
+	--color-sidebar-foreground: var(--text);
+	--color-sidebar-primary: var(--accent-solid);
+	--color-sidebar-primary-foreground: var(--on-accent);
+	--color-sidebar-accent: var(--accent-ghost);
+	--color-sidebar-accent-foreground: var(--text);
+	--color-sidebar-border: var(--border);
+	--color-sidebar-ring: var(--accent-strong);
+
+	/* Type and focus. Named differently from the DS token so neither self-references. */
+	--font-heading: var(--font-display);
+	--shadow-ring: var(--shadow-focus);
+}

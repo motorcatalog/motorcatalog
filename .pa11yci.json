@@ -1,0 +1,31 @@
+{
+	"defaults": {
+		"standard": "WCAG2AA",
+		"runners": ["axe"],
+		"timeout": 30000,
+		"wait": 1000,
+		"actions": ["wait for element #main h1 to be visible"],
+		"chromeLaunchConfig": {
+			"args": ["--no-sandbox", "--disable-setuid-sandbox"]
+		}
+	},
+	"urls": [
+		"http://localhost:4173/",
+		{
+			"url": "http://localhost:4173/#lang-open",
+			"actions": [
+				"wait for element #main h1 to be visible",
+				"click element details[data-picker=lang] > summary",
+				"wait for element details[data-picker=lang] .picker-list to be visible"
+			]
+		},
+		{
+			"url": "http://localhost:4173/#theme-open",
+			"actions": [
+				"wait for element #main h1 to be visible",
+				"click element details[data-picker=theme] > summary",
+				"wait for element details[data-picker=theme] .picker-list to be visible"
+			]
+		}
+	]
+}

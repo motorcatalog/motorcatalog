@@ -1,0 +1,11 @@
+{
+	"app.title": "MotorCatalog",
+	"app.tagline": "Your car's service history, in one place.",
+	"picker.language": "Language",
+	"picker.theme": "Theme",
+	"picker.currency": "Currency",
+	"picker.system": "System ({value})",
+	"theme.light": "Light",
+	"theme.dark": "Dark",
+	"price.example": "Example price"
+}

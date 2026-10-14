@@ -1,0 +1,51 @@
+/* ======================================================================
+   src/styles/index.css: THE CSS ENTRY (imported once from main.js)
+   Cascade layers, lowest first: Tailwind's theme defaults, the design
+   system (with our brand palette last inside it), Tailwind utilities.
+   DS tokens beat Tailwind's defaults, and utilities beat DS component
+   rules, so class="btn mt-4" works. Tailwind's preflight is not imported:
+   the DS reset is the reset. Same setup as the workbench web-react-ts
+   scaffold, without shadcn.
+
+   The bridge (design-system/tokens/tailwind.css) and the @theme block
+   below are unlayered because @theme and @custom-variant must be top
+   level. The bridge comes after theme.css because its --color-*: initial
+   only resets a namespace that is already declared. main.css (project
+   styles) is imported after this file from main.js and stays unlayered,
+   so it still wins over everything here.
+   ====================================================================== */
+
+@layer theme, base, design-system, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "../../design-system/tokens/tailwind.css";
+
+@import "../../design-system/tokens/index.css" layer(design-system);
+@import "../../design-system/base/reset.css" layer(design-system);
+@import "../../design-system/base/base.css" layer(design-system);
+@import "../../design-system/primitives/index.css" layer(design-system);
+@import "../../design-system/components/index.css" layer(design-system);
+@import "../../design-system/compositions/index.css" layer(design-system);
+@import "../../design-system/utilities/index.css" layer(design-system);
+
+/* Fraunces 500 for headings and the wordmark. The DS bundles 600 only.
+   Self-hosted from node_modules, so there are no calls to Google Fonts. */
+@import "@fontsource/fraunces/latin-500.css" layer(design-system);
+@import "./palette.css" layer(design-system);
+
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Brand names on top of the bridge's semantic names (bg-primary, bg-card,
+   text-foreground, text-muted-foreground, border-border ...). Both follow
+   the theme: text-brass turns brass dark in light mode, where plain brass
+   fails contrast on white. */
+@theme inline {
+	--color-brass: var(--accent);
+	--color-oxblood: var(--accent-solid);
+}
+
+/* Design-system class names Tailwind would otherwise generate too: the DS
+   .text-muted is a text colour, Tailwind's text-muted is the quiet fill,
+   and the utilities layer would win. These names stay the DS's.
+   tests/tailwind-collisions.test.js fails when a name is missing here. */
+@source not inline("container grid sr-only table text-muted mt-6 mb-6");
