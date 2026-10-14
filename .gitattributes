@@ -1,0 +1,6 @@
+# LF everywhere, so Biome (which expects LF) passes on Windows and Mac alike
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.woff2 binary
