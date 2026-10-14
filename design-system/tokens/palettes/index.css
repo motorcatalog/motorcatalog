@@ -1,0 +1,20 @@
+/*
+ * Brand palettes — each is opt-in via <html data-palette="NAME">.
+ * A palette overrides only the channels it needs; everything else derives
+ * from colors.css. Add a new brand = drop a file here + one @import line.
+ */
+@import "./_oled.css";
+@import "./gold.css";
+@import "./wend.css";
+@import "./daily.css";
+@import "./ignite.css";
+@import "./kenaz.css";
+@import "./tidsro.css";
+@import "./hugin.css";
+@import "./classic.css";
+
+/* Type skins — opt-in via <html data-typeskin="NAME">; compose with any palette.
+   Imported after palettes so a skin's type tokens win on specificity ties (order decides). */
+@import "./fraunces.css";
+@import "./instrument.css";
+@import "./nordic.css";

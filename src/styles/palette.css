@@ -1,0 +1,63 @@
+/* ======================================================================
+   src/styles/palette.css: the MotorCatalog brand on top of the DS tokens
+   Source of truth for the colours: docs/brand/README.md. Opt-in is
+   data-palette="motorcatalog" on <html>, set in index.html.
+
+   Imported into the design-system layer, after the DS itself. Each block
+   names its theme, so it outranks the DS's own [data-theme] blocks and
+   light mode still gets the DS light surfaces. An unlayered palette would
+   beat every layer and keep the dark ground in light mode.
+
+   Contrast, measured: text on Ground 17.3:1, muted 8.2:1, brass 8.4:1,
+   light text on oxblood 5.9:1 (5.1:1 on hover), overdue red on Ground
+   5.8:1, control border 3.0:1 or more on every surface.
+   ====================================================================== */
+
+[data-palette="motorcatalog"] {
+	--font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--font-display: "Fraunces", Georgia, serif;
+	--weight-display: 500;
+}
+
+[data-theme="dark"][data-palette="motorcatalog"] {
+	/* Ground (surface-1) and Surface (surface-3) are brand colours; the
+	   steps between and above them are filled in to keep the DS ramp. */
+	--surface-0: #000000;
+	--surface-1: #0b0d10;
+	--surface-2: #101317;
+	--surface-3: #15181d;
+	--surface-4: #1d2127;
+	--surface-5: #252a31;
+
+	--text: #f4f1ec;
+	--text-muted: #a3a9b1;
+
+	--border: #2a2e35;
+	--border-strong: #363b43;
+	--border-soft: #1c1f24;
+	--control-border: #656b74;
+
+	/* Brass is the accent (links, focus, highlights). Oxblood is the
+	   primary button fill, never text on the ground (2.9:1). */
+	--accent-rgb: 207 164 90;
+	--accent-strong-rgb: 221 184 120;
+	--secondary-rgb: 140 106 44;
+	--accent-solid: #a8322a;
+	--accent-solid-strong: #b8392f;
+	--on-accent: #f4f1ec;
+
+	/* Overdue and errors: a brighter red than oxblood, so a late service
+	   never looks like a brand button. */
+	--danger-rgb: 239 91 79;
+}
+
+[data-theme="light"][data-palette="motorcatalog"] {
+	/* Plain brass on white is 2.3:1, so the accent darkens past brass dark. */
+	--accent-rgb: 125 94 39;
+	--accent-strong-rgb: 104 78 30;
+	--secondary-rgb: 140 106 44;
+	--accent-solid: #a8322a;
+	--accent-solid-strong: #8f2a23;
+	--on-accent: #ffffff;
+	--danger-rgb: 180 35 24;
+}

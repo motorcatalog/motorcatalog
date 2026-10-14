@@ -1,0 +1,112 @@
+/* Preference picker: a <details> disclosure with an icon-only trigger and a list
+   of rows (language, theme, currency). The markup works without JavaScript;
+   components/picker.js adds Escape, arrow keys, outside-click and focus rules.
+
+   The trigger is the DS .icon-btn on <summary>, so it shares the 44px floor and
+   the control border of every other icon button. The list is positioned under
+   the trigger and anchored to its right edge: a right-aligned header picker
+   never pushes its list past the viewport at 320px. No animation. */
+.picker {
+	position: relative;
+	display: inline-block;
+}
+/* No disclosure triangle: the icon is the whole trigger. inline-flex from .btn
+   drops the marker in Chrome and Firefox; Safari needs the pseudo-element. */
+.picker > summary {
+	list-style: none;
+	cursor: pointer;
+}
+.picker > summary::-webkit-details-marker {
+	display: none;
+}
+/* Browsers do not all draw a ring on <summary>; restate the base.css ring. */
+.picker > summary:focus-visible {
+	outline: 2px solid var(--accent-strong);
+	outline-offset: 2px;
+	box-shadow: var(--shadow-focus);
+}
+
+.picker-list {
+	position: absolute;
+	inset-block-start: calc(100% + var(--space-1));
+	inset-inline-end: 0;
+	z-index: var(--z-dropdown);
+	/* Content-sized, so "Norwegian Krone" stays on one line, and capped to the
+	   viewport so a 200% text size cannot push the list wider than the screen.
+	   picker.js shifts the list right when it would run off the left edge. */
+	inline-size: max-content;
+	min-inline-size: min(12rem, 100vw - 2 * var(--space-4));
+	max-inline-size: min(22rem, 100vw - 2 * var(--space-4));
+	/* A cap with scroll, never a fixed height: at 200% text size the rows grow
+	   and the list scrolls instead of clipping. */
+	max-block-size: min(60vh, 24rem);
+	overflow-y: auto;
+	margin: 0;
+	padding: var(--space-1);
+	list-style: none;
+	background: var(--surface-2);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-md);
+	box-shadow: var(--shadow-md);
+}
+
+/* A row is a <button> in an app or an <a> on a per-URL site; both get the
+   same box. Full-width hit area, 44px floor, long names wrap. */
+.picker-row {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	inline-size: 100%;
+	min-height: 2.75rem;
+	padding: var(--space-2) var(--space-3);
+	border: 0;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--text);
+	font: inherit;
+	text-align: start;
+	text-decoration: none;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+.picker-row:hover {
+	background: var(--surface-4);
+	color: var(--text);
+	text-decoration: none;
+}
+/* The active row: accent wash plus the check icon. State lives in aria-current
+   and the trigger name; the icon only mirrors it. */
+.picker-row[aria-current] {
+	background: var(--accent-soft);
+	font-weight: 600;
+}
+.picker-row > .icon {
+	margin-inline-start: auto;
+}
+@media (forced-colors: active) {
+	.picker-row[aria-current] {
+		forced-color-adjust: none;
+		background: Highlight;
+		color: HighlightText;
+	}
+}
+
+/* Currency rows: flag, ISO code, name. The code column is a fixed ch width in
+   the mono face so the names start on one line. The flag is an <img>, which
+   never runs a script inside the SVG and needs no currentColor. */
+.picker-flag {
+	inline-size: 1.25rem;
+	block-size: 1.25rem;
+	flex-shrink: 0;
+	border-radius: var(--radius-pill);
+}
+.picker-code {
+	flex-shrink: 0;
+	inline-size: 4ch;
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	color: var(--text-muted);
+}
+.picker-row[aria-current] .picker-code {
+	color: inherit;
+}

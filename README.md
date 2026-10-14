@@ -32,8 +32,65 @@ Profiles keep data apart on a shared device. They are not a security feature: an
 - Tailwind CSS
 - localStorage
 - PWA (web app manifest and service worker)
+- Biome and node's built-in test runner
 
 The app follows MVC. The model holds data only, views render it, and controllers handle input and update the model.
+
+## Setup
+
+You need Node 22.13 or newer.
+
+```bash
+npm install
+npm run dev
+```
+
+`npm install` also downloads a Chrome for the browser tests (about 190 MB, once).
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Build to `dist/` |
+| `npm run preview` | Serve the build |
+| `npm test` | All tests: model, controller, view, accessibility, Tailwind guard, icons and the browser tests |
+| `npm run check` | Format, lint and sort imports with Biome |
+
+## Languages
+
+The UI is in English and Norwegian (bokmål). English is the default. The language picker in the header switches between them, and the choice is remembered on this device.
+
+All UI text lives in `src/locales/en.json` and `src/locales/nb.json`. Both files must have the same keys, and a test fails if they drift. In the view, text goes through `t("key")`, never as a literal.
+
+## Project structure
+
+- `src/model/`: state and data. No DOM.
+- `src/view/`: renders HTML from state and passes clicks on to the controller.
+- `src/controller/`: handles input and updates the model.
+- `src/locales/`: UI text, one file per language.
+- `src/styles/index.css`: the CSS entry. Design system, brand palette and Tailwind.
+- `src/styles/palette.css`: our brand colours and fonts.
+- `src/styles/main.css`: project styles that Tailwind classes do not cover.
+- `design-system/` and `i18n/`: shared foundation from my workbench. Read-only, never edit them here.
+- `public/`: icons and the web app manifest. The icons are copies from `docs/brand/`.
+- `tests/`: node's built-in test runner.
+
+## Styling with Tailwind
+
+Tailwind's default colours (`bg-zinc-900`, `text-red-500` ...) are switched off. Use our names instead, so light and dark mode both work:
+
+| Brand role | Class |
+|---|---|
+| Ground (page) | `bg-background` |
+| Surface (cards, rows) | `bg-card` |
+| Text | `text-foreground` |
+| Muted text | `text-muted-foreground` |
+| Border | `border-border` |
+| Oxblood (primary buttons, fill only) | `bg-primary text-primary-foreground` or `bg-oxblood` |
+| Brass (accents, highlight text) | `text-brass` |
+| Overdue and errors | `text-danger`, `bg-danger-soft` |
+| Fraunces (headings) | `font-heading` |
+
+Headings (`h1` to `h4`) already use Fraunces. Colours and contrast rules: [`docs/brand/README.md`](docs/brand/README.md).
 
 ## How we work
 
@@ -43,4 +100,4 @@ The app follows MVC. The model holds data only, views render it, and controllers
 
 ## Status
 
-In planning. Setup instructions follow with the first scaffold.
+Sprint 1: the scaffold is in place; the first features are next.

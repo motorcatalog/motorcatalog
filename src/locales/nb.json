@@ -1,0 +1,11 @@
+{
+	"app.title": "MotorCatalog",
+	"app.tagline": "Bilens servicehistorikk, samlet på ett sted.",
+	"picker.language": "Språk",
+	"picker.theme": "Tema",
+	"picker.currency": "Valuta",
+	"picker.system": "System ({value})",
+	"theme.light": "Lyst",
+	"theme.dark": "Mørkt",
+	"price.example": "Eksempelpris"
+}

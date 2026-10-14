@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="color-scheme" content="dark light" />
+		<meta name="description" content="Your car's service history, in one place." />
+		<meta name="theme-color" content="#0b0d10" />
+		<title>MotorCatalog</title>
+
+		<!-- Icons, copied from docs/brand (tests/brand-icons.test.js keeps them identical) -->
+		<link rel="icon" href="/favicon.ico" sizes="48x48" />
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<link rel="manifest" href="/manifest.webmanifest" />
+
+		<!-- No-flash theme init (design-system/theme/theme-init-snippet.html): must run
+		     BEFORE stylesheets. Rule: stored key (if "light" or "dark") ?? prefers-color-scheme.
+		     Nothing is stored until the user picks; an invalid stored value is removed.
+		     The palette is always ours (src/styles/palette.css), never a stored choice. -->
+		<script>
+			(() => {
+				var root = document.documentElement;
+				var theme = null;
+				try {
+					theme = localStorage.getItem("theme");
+					if (theme !== "light" && theme !== "dark") {
+						if (theme !== null) localStorage.removeItem("theme");
+						theme = null;
+					}
+				} catch {}
+				if (!theme) {
+					theme = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+				}
+				root.dataset.theme = theme;
+				root.dataset.palette = "motorcatalog";
+			})();
+		</script>
+
+		<!-- Styles load from src/main.js: styles/index.css (design system, brand
+		     palette, Tailwind), then styles/main.css (project styles). -->
+	</head>
+	<body>
+		<a class="skip-link" href="#main">Skip to content</a>
+
+		<div id="app" class="container stack stack-lg">
+			<!-- The view renders the wordmark and the preference pickers into #header
+			     and everything else into #main. UI text lives in src/locales, not here;
+			     the controller keeps <html lang>, <title> and data-theme in sync. -->
+			<header id="header" class="topbar"></header>
+			<main id="main" class="card stack"></main>
+		</div>
+
+		<!-- Picker behaviour (keyboard, focus, one open at a time) for every
+		     details[data-picker]. The controller owns the stored preferences through
+		     design-system/theme/preferences.js, so theme-toggle.js is not loaded.
+		     type="module" so Vite bundles it into the production build. -->
+		<script type="module" src="/design-system/components/picker.js"></script>
+
+		<!-- Vite entry point -->
+		<script type="module" src="/src/main.js"></script>
+	</body>
+</html>
