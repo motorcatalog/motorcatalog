@@ -1,87 +1,62 @@
 /* ======================================================================
-   src/model/model.js — MODEL
-   State and data only. No DOM. No timers.
-   Change state through methods here, then call notify() so the view
-   re-renders.
+   src/model/model.js: MODEL
+   One plain object and nothing else: no functions, no classes, no DOM.
+   The controller is the only code that changes it, and the view only
+   reads it. The shape is documented in docs/design/data-model.md.
 
-   The three preferences (lang, theme, currency) follow one rule:
-   value = chosen (if any) ?? system. "System" is the absence of a choice
-   (null here, no key in storage), never a stored "system" string. The
-   controller reads and writes storage; this model only holds the values.
+     app     what is on screen right now
+     inputs  what is typed into the open form, as strings
+     data    what is saved to localStorage
+
+   Preferences follow one rule: the value used is chosen ?? system.
+   System is the absence of a choice (null here, no key in storage),
+   never a stored "system" string. The controller saves them under their
+   own keys, because they belong to the device and not to a profile.
    ====================================================================== */
 
-// What the project offers. A picker renders only when a list here has more
-// than one entry. `regions` maps the region of a navigator.languages entry
-// to a currency and lists only regions whose currency is in `currencies`.
-// `flags` names the design-system/assets/flags/<cc>.svg file per currency.
-export const config = Object.freeze({
-	// Service costs are in NOK only, so the currency picker stays hidden.
-	currencies: ["NOK"],
-	baseCurrency: "NOK",
-	regions: { NO: "NOK" },
-	flags: { NOK: "no" },
-})
-
-export const PREFERENCES = Object.freeze(["lang", "theme", "currency"])
-
-// The currency of the first navigator.languages entry whose region is in the
-// table; the base currency when no entry carries a mapped region.
-export function systemCurrency(languages, { regions, baseCurrency }) {
-	for (const tag of languages ?? []) {
-		const region = String(tag).split("-")[1]
-		const currency = region && regions[region.toUpperCase()]
-		if (currency) return currency
-	}
-	return baseCurrency
-}
-
-// `chosen`: the stored choice per preference or null (System).
-// `system`: what System resolves to right now, per preference.
-export function createModel({ chosen, system, languages }) {
-	const subscribers = []
-
-	const state = {
-		chosen: { lang: null, theme: null, currency: null, ...chosen },
-		system: { ...system },
-		languages, // bundle keys from src/locales, in picker order
-		config,
-		// Resolved values the view renders with. Kept in sync by resolve().
-		lang: null,
-		theme: null,
-		currency: null,
-		// project state goes here
-	}
-	resolve()
-
-	function resolve() {
-		for (const name of PREFERENCES) state[name] = state.chosen[name] ?? state.system[name]
-	}
-
-	function subscribe(fn) {
-		subscribers.push(fn)
-	}
-
-	function notify() {
-		for (const fn of subscribers) fn(state)
-	}
-
-	// An explicit choice, or "" / null for the System row.
-	function setPreference(name, value) {
-		const next = value === "" || value === undefined ? null : value
-		if (next === state.chosen[name]) return
-		state.chosen[name] = next
-		resolve()
-		notify()
-	}
-
-	// The live system value changed (the OS switched theme, another tab
-	// cleared the key). Only matters to the view while nothing is chosen.
-	function setSystem(name, value) {
-		if (value === state.system[name]) return
-		state.system[name] = value
-		resolve()
-		notify()
-	}
-
-	return { subscribe, notify, state, setPreference, setSystem }
+export const model = {
+	app: {
+		page: "garage", // garage | car | history | maintenance | costs | profiles
+		selectedCarId: null,
+		historyFilter: "all", // all | service | repair | other
+		costsYear: null, // null = the current year
+		preferences: {
+			chosen: { lang: null, theme: null, currency: null }, // null = follow the system
+			system: { lang: "en", theme: "dark", currency: "NOK" },
+		},
+	},
+	inputs: {
+		profile: { name: "" },
+		car: {
+			make: "",
+			model: "",
+			year: "",
+			regNumber: "",
+			vin: "",
+			fuel: "petrol",
+			engine: "",
+			mileage: "",
+			euInspectionDue: "",
+		},
+		serviceEntry: {
+			category: "service",
+			title: "",
+			date: "",
+			mileage: "",
+			cost: "",
+			workshop: "",
+			notes: "",
+		},
+		task: { title: "", dueDate: "", dueMileage: "", repeatMonths: "", repeatKm: "" },
+		editingId: null, // the id being edited, or null when adding
+		errors: {}, // field name to error text key
+	},
+	data: {
+		version: 1,
+		activeProfileId: null,
+		profiles: [],
+		cars: [],
+		serviceEntries: [],
+		tasks: [],
+	},
 }

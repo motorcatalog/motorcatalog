@@ -1,5 +1,5 @@
 /* ======================================================================
-   tests/view.test.js — the header renders what the model offers
+   tests/view.test.js: the header renders what the model offers
    The view is rendered into jsdom (already a dev dependency for the
    a11y tests) and the markup is asserted on. Axe runs over the same
    markup in tests/a11y/view.test.js.
@@ -9,8 +9,10 @@ import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
 import { JSDOM } from "jsdom"
 import { createTranslator } from "../i18n/index.js"
+import { config } from "../src/config.js"
+import { resolvePreferences } from "../src/controller/controller.js"
 import { bundles, FALLBACK_LANG } from "../src/locales/index.js"
-import { config, createModel } from "../src/model/model.js"
+import { model as initialModel } from "../src/model/model.js"
 import { createView, escapeHtml } from "../src/view/view.js"
 import { MULTI_CURRENCY } from "./fixtures.js"
 
@@ -19,26 +21,40 @@ const i18n = createTranslator(bundles, { fallback: FALLBACK_LANG })
 let dom
 afterEach(() => dom?.window.close())
 
-function mount(state) {
+// What the controller hands the view: a clone of the model with these
+// choices and system values, and the derived values worked out from them.
+function screen({ chosen = {}, system = {} } = {}) {
+	const model = structuredClone(initialModel)
+	Object.assign(model.app.preferences.chosen, chosen)
+	Object.assign(
+		model.app.preferences.system,
+		{ lang: "nb", theme: "dark", currency: "NOK" },
+		system
+	)
+	return { model, derived: resolvePreferences(model.app.preferences) }
+}
+
+// `offer` is the config the view is built with: three currencies by
+// default so the hidden currency picker stays covered.
+function mount({ model, derived }, { translator = i18n, offer = MULTI_CURRENCY } = {}) {
 	dom = new JSDOM(
 		`<!doctype html><html lang="en"><body><header id="header"></header><main id="main"></main></body></html>`
 	)
 	const { document } = dom.window
 	const roots = { header: document.getElementById("header"), main: document.getElementById("main") }
-	const view = createView(roots, i18n)
-	view.renderHeader(state)
-	view.render(state)
+	const view = createView(roots, translator, offer)
+	view.renderHeader(model, derived)
+	view.render(model, derived)
 	return { ...roots, view }
 }
 
-function state({ chosen = {}, system = {}, languages = ["en", "nb"], currencies } = {}) {
-	const model = createModel({
-		chosen,
-		system: { lang: "nb", theme: "dark", currency: "NOK", ...system },
-		languages,
-	})
-	model.state.config = currencies ? { ...config, currencies } : MULTI_CURRENCY
-	return model.state
+// Freezes every object in the tree, so any write throws in strict mode.
+function deepFreeze(value) {
+	if (value && typeof value === "object") {
+		for (const child of Object.values(value)) deepFreeze(child)
+		Object.freeze(value)
+	}
+	return value
 }
 
 test("escapeHtml neutralises the five HTML characters", () => {
@@ -49,25 +65,27 @@ test("escapeHtml neutralises the five HTML characters", () => {
 })
 
 test("the header renders the three pickers in the order language, theme, currency", () => {
-	const { header } = mount(state())
+	const { header } = mount(screen())
 	const names = [...header.querySelectorAll("details[data-picker]")].map((d) => d.dataset.picker)
 	assert.deepEqual(names, ["lang", "theme", "currency"])
 })
 
 test("the currency picker renders only when the project offers more than one currency", () => {
-	const { header } = mount(state({ currencies: ["NOK"] }))
+	const { header } = mount(screen(), { offer: config })
 	assert.equal(header.querySelector('[data-picker="currency"]'), null)
 	assert.ok(header.querySelector('[data-picker="lang"]'))
 	assert.ok(header.querySelector('[data-picker="theme"]'))
 })
 
 test("the language picker renders only when there is more than one bundle", () => {
-	const { header } = mount(state({ languages: ["en"], system: { lang: "en" } }))
+	const { header } = mount(screen({ system: { lang: "en" } }), {
+		translator: createTranslator({ en: bundles.en }),
+	})
 	assert.equal(header.querySelector('[data-picker="lang"]'), null)
 })
 
 test("language rows: System first with an empty data-lang, every row carries lang, the active row aria-current", () => {
-	const { header } = mount(state({ chosen: { lang: "en" }, system: { lang: "nb" } }))
+	const { header } = mount(screen({ chosen: { lang: "en" }, system: { lang: "nb" } }))
 	const rows = [...header.querySelectorAll('[data-picker="lang"] .picker-row')]
 	assert.equal(rows[0].dataset.lang, "")
 	assert.equal(rows[0].querySelector("span[lang]").getAttribute("lang"), "nb")
@@ -87,7 +105,7 @@ test("language rows: System first with an empty data-lang, every row carries lan
 })
 
 test("the System row of each picker says what System resolves to right now", () => {
-	const { header } = mount(state({ system: { lang: "nb", theme: "light", currency: "EUR" } }))
+	const { header } = mount(screen({ system: { lang: "nb", theme: "light", currency: "EUR" } }))
 	const first = (name) => header.querySelector(`[data-picker="${name}"] .picker-row`)
 	assert.equal(first("lang").textContent.trim(), "System (Norsk bokmål)")
 	assert.equal(first("theme").textContent.trim(), "System (Lyst)") // UI language is nb
@@ -97,15 +115,15 @@ test("the System row of each picker says what System resolves to right now", () 
 })
 
 test("the theme trigger shows the sun when light resolves and the moon when dark does", () => {
-	const light = mount(state({ chosen: { theme: "light" } }))
+	const light = mount(screen({ chosen: { theme: "light" } }))
 	assert.ok(light.header.querySelector('[data-picker="theme"] summary svg circle'))
 	dom.window.close()
-	const dark = mount(state({ system: { theme: "dark" } }))
+	const dark = mount(screen({ system: { theme: "dark" } }))
 	assert.equal(dark.header.querySelector('[data-picker="theme"] summary svg circle'), null)
 })
 
 test("currency rows carry a decorative flag, the ISO code and the Intl name; the trigger shows the active flag", () => {
-	const { header } = mount(state({ chosen: { currency: "USD", lang: "en" } }))
+	const { header } = mount(screen({ chosen: { currency: "USD", lang: "en" } }))
 	const rows = [...header.querySelectorAll('[data-picker="currency"] .picker-row')].slice(1)
 	for (const row of rows) {
 		const img = row.querySelector("img.picker-flag")
@@ -127,10 +145,10 @@ test("currency rows carry a decorative flag, the ISO code and the Intl name; the
 })
 
 test("the example price is rendered with money(): the language sets the format, the currency the symbol", () => {
-	const nb = mount(state({ chosen: { lang: "nb", currency: "NOK" } }))
+	const nb = mount(screen({ chosen: { lang: "nb", currency: "NOK" } }))
 	assert.ok(nb.main.textContent.includes(i18n.money("nb", 949, "NOK")))
 	dom.window.close()
-	const en = mount(state({ chosen: { lang: "en", currency: "EUR" } }))
+	const en = mount(screen({ chosen: { lang: "en", currency: "EUR" } }))
 	assert.ok(en.main.textContent.includes(i18n.money("en", 949, "EUR")))
 })
 
@@ -142,9 +160,21 @@ test("a bundle string with markup is rendered as text, not as HTML", () => {
 	const { document } = dom.window
 	const view = createView(
 		{ header: document.getElementById("header"), main: document.getElementById("main") },
-		hostile
+		hostile,
+		MULTI_CURRENCY
 	)
-	view.render(state({ chosen: { lang: "en" } }))
+	const { model, derived } = screen({ chosen: { lang: "en" } })
+	view.render(model, derived)
 	assert.equal(document.querySelector("main b"), null)
 	assert.equal(document.querySelector("main h1").textContent, "<b>x</b>")
+})
+
+test("the view only reads the model: a deep-frozen model renders without throwing", () => {
+	const { model, derived } = screen({ chosen: { lang: "en" } })
+	deepFreeze(model)
+	// The guard itself goes red: a write to the frozen model throws.
+	assert.throws(() => {
+		model.app.preferences.chosen.lang = "nb"
+	}, TypeError)
+	assert.doesNotThrow(() => mount({ model, derived }))
 })

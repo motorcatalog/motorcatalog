@@ -1,16 +1,18 @@
 /* ======================================================================
-   src/view/view.js — VIEW
-   Renders HTML from state and forwards user actions to the controller.
-   No state mutation. No timers.
+   src/view/view.js: VIEW
+   Renders HTML from the model and forwards user actions to the controller.
+   It only reads the model. No timers.
    Interactive elements carry a data-action attribute
    (e.g. <button data-action="add">); bindActions routes them by name.
-   Every user-facing string goes through t() — never a literal.
+   Every user-facing string goes through t(), never a literal.
    Every string goes through esc() before it lands in innerHTML, Intl
-   output included — never concatenate raw.
+   output included. Never concatenate raw.
 
-   Two roots: the header (wordmark + the three preference pickers) is
-   rendered by renderHeader(state) and only when a preference changes;
-   everything else is render(state).
+   Both render functions take (model, derived). `derived` holds what the
+   controller worked out from the model, such as the lang, theme and
+   currency in use. Two roots: the header (wordmark + the preference
+   pickers) is drawn by renderHeader() and only when a preference
+   changes; everything else is render().
    ====================================================================== */
 
 import { icon } from "../../design-system/components/icons.js"
@@ -35,7 +37,7 @@ function flagUrl(cc) {
 	return new URL(`../../design-system/assets/flags/${cc}.svg`, import.meta.url).href
 }
 
-export function createView({ header, main }, i18n) {
+export function createView({ header, main }, i18n, config) {
 	const esc = escapeHtml
 
 	// Autonym with an upper-cased first letter; the code when the browser
@@ -49,19 +51,19 @@ export function createView({ header, main }, i18n) {
 		return new Intl.DisplayNames([lang], { type: "currency" }).of(code) || code
 	}
 
-	function render(state) {
-		const t = (key, vars) => i18n.t(state.lang, key, vars)
+	function render(_model, derived) {
+		const t = (key, vars) => i18n.t(derived.lang, key, vars)
 
 		// An example price: data is { amount, currency }, never a price string.
 		// The language picks separators and symbol placement, the currency the symbol.
-		const price = { amount: 949, currency: state.currency }
+		const price = { amount: 949, currency: derived.currency }
 
 		main.innerHTML = `
 			<h1>${esc(t("app.title"))}</h1>
 			<p class="text-muted-foreground">${esc(t("app.tagline"))}</p>
-			<p><strong>${esc(t("price.example"))}:</strong> ${esc(i18n.money(state.lang, price.amount, price.currency))}</p>
+			<p><strong>${esc(t("price.example"))}:</strong> ${esc(i18n.money(derived.lang, price.amount, price.currency))}</p>
 		`
-		// build the rest of the UI from state here
+		// build the rest of the UI from model and derived here
 	}
 
 	// One row of a picker. The label sits in one span so text around a <span lang>
@@ -92,8 +94,7 @@ export function createView({ header, main }, i18n) {
 		return esc(t("picker.system")).replace("{value}", valueHtml)
 	}
 
-	function languagePicker(state, t) {
-		const { chosen, system, languages } = state
+	function languagePicker({ chosen, system }, derived, t) {
 		const systemName = `<span lang="${esc(system.lang)}">${esc(langName(system.lang))}</span>`
 		const rows = [
 			pickerRow({
@@ -101,7 +102,7 @@ export function createView({ header, main }, i18n) {
 				active: chosen.lang === null,
 				label: systemLabel(t, systemName),
 			}),
-			...languages.map((code) =>
+			...i18n.languages.map((code) =>
 				pickerRow({
 					attrs: `data-action="set-lang" data-lang="${esc(code)}"`,
 					lang: code,
@@ -111,7 +112,7 @@ export function createView({ header, main }, i18n) {
 			),
 		]
 		const current = chosen.lang
-			? langName(state.lang)
+			? langName(derived.lang)
 			: t("picker.system", { value: langName(system.lang) })
 		return picker({
 			name: "lang",
@@ -122,8 +123,7 @@ export function createView({ header, main }, i18n) {
 		})
 	}
 
-	function themePicker(state, t) {
-		const { chosen, system } = state
+	function themePicker({ chosen, system }, derived, t) {
 		const label = (theme) => t(`theme.${theme}`)
 		const rows = [
 			pickerRow({
@@ -140,19 +140,18 @@ export function createView({ header, main }, i18n) {
 			),
 		]
 		const current = chosen.theme
-			? label(state.theme)
+			? label(derived.theme)
 			: t("picker.system", { value: label(system.theme) })
 		return picker({
 			name: "theme",
-			triggerIcon: icon(state.theme === "light" ? "sun" : "moon"),
+			triggerIcon: icon(derived.theme === "light" ? "sun" : "moon"),
 			triggerName: `${t("picker.theme")}: ${current}`,
 			listLabel: t("picker.theme"),
 			rows,
 		})
 	}
 
-	function currencyPicker(state, t) {
-		const { chosen, system, config } = state
+	function currencyPicker({ chosen, system }, derived, t) {
 		const rows = [
 			pickerRow({
 				attrs: 'data-action="set-currency" data-currency=""',
@@ -164,16 +163,16 @@ export function createView({ header, main }, i18n) {
 					attrs: `data-action="set-currency" data-currency="${esc(code)}"`,
 					active: chosen.currency === code,
 					lead: `${flag(code, config.flags)}<span class="picker-code">${esc(code)}</span>`,
-					label: esc(currencyName(code, state.lang)),
+					label: esc(currencyName(code, derived.lang)),
 				})
 			),
 		]
 		const current = chosen.currency
-			? state.currency
+			? derived.currency
 			: t("picker.system", { value: system.currency })
 		return picker({
 			name: "currency",
-			triggerIcon: flag(state.currency, config.flags),
+			triggerIcon: flag(derived.currency, config.flags),
 			triggerName: `${t("picker.currency")}: ${current}`,
 			listLabel: t("picker.currency"),
 			rows,
@@ -182,12 +181,13 @@ export function createView({ header, main }, i18n) {
 
 	// The wordmark and the pickers, right-aligned, in the order language,
 	// theme, currency. A picker renders only when there is a choice to make.
-	function renderHeader(state) {
-		const t = (key, vars) => i18n.t(state.lang, key, vars)
+	function renderHeader(model, derived) {
+		const t = (key, vars) => i18n.t(derived.lang, key, vars)
+		const { preferences } = model.app
 		const pickers = [
-			state.languages.length > 1 ? languagePicker(state, t) : "",
-			THEME_OPTIONS.length > 1 ? themePicker(state, t) : "",
-			state.config.currencies.length > 1 ? currencyPicker(state, t) : "",
+			i18n.languages.length > 1 ? languagePicker(preferences, derived, t) : "",
+			THEME_OPTIONS.length > 1 ? themePicker(preferences, derived, t) : "",
+			config.currencies.length > 1 ? currencyPicker(preferences, derived, t) : "",
 		]
 		header.innerHTML = `
 			<div class="cluster-between">

@@ -1,13 +1,14 @@
 /* ======================================================================
-   src/app.js — APP WIRING
-   Connects model, view, and controller. Rarely edited — day-to-day work
-   happens in src/model, src/view, and src/controller.
+   src/app.js: APP WIRING
+   Connects model, view and controller. Rarely edited. Day-to-day work
+   happens in src/model, src/view and src/controller.
    ====================================================================== */
 
 import { createTranslator } from "../i18n/index.js"
-import { createController, readPreferences } from "./controller/controller.js"
+import { config } from "./config.js"
+import { createController } from "./controller/controller.js"
 import { bundles, FALLBACK_LANG } from "./locales/index.js"
-import { config, createModel } from "./model/model.js"
+import { model } from "./model/model.js"
 import { createView } from "./view/view.js"
 
 export function createApp() {
@@ -17,10 +18,8 @@ export function createApp() {
 	if (!header || !main) throw new Error("Missing #header or #main element in index.html")
 
 	const i18n = createTranslator(bundles, { fallback: FALLBACK_LANG })
-	const { chosen, system } = readPreferences({ i18n, config })
-	const model = createModel({ chosen, system, languages: i18n.languages })
-	const view = createView({ header, main }, i18n)
-	const controller = createController({ model, view, i18n })
+	const view = createView({ header, main }, i18n, config)
+	const controller = createController({ model, view, i18n, config })
 
 	controller.init()
 }
