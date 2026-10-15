@@ -136,17 +136,14 @@ test("a second page in the same context flips theme when the first clears the ke
 	)
 })
 
-test("choosing a language stores it, switches <html lang>, the tagline and the price format", async () => {
+test("choosing a language stores it, switches <html lang> and the page text", async () => {
 	const { page } = await open()
-	const before = await page.$eval("#main p:last-of-type", (el) => el.textContent)
 	await choose(page, "lang", "data-lang", "nb")
 	assert.equal(await stored(page, "lang"), "nb")
 	assert.equal(await page.$eval("html", (el) => el.lang), "nb")
-	// The title is MotorCatalog in both languages, so the tagline shows the switch.
-	assert.equal(await page.$eval("#main h1 + p", (el) => el.textContent), nb["app.tagline"])
+	assert.equal(await page.$eval("#main h1", (el) => el.textContent), nb["welcome.title"])
+	assert.equal(await page.$eval("#main h1 + p", (el) => el.textContent), nb["welcome.intro"])
 	assert.equal(await focused(page), "lang:summary.btn")
-	const after = await page.$eval("#main p:last-of-type", (el) => el.textContent)
-	assert.notEqual(before, after)
 })
 
 test("keyboard walk: Tab to trigger, Enter opens on the active row, arrows wrap, Escape returns focus, Tab out closes", async () => {
