@@ -13,6 +13,10 @@
    "theme" and "currency" hold a real option or nothing (System). A write
    that fails (Safari private mode) is swallowed there, and the model
    keeps the choice for the open page.
+
+   model.data is saved as JSON under the single key "motorcatalog" after
+   every change. Missing, broken or wrongly shaped data is ignored, and
+   the app starts empty (docs/design/data-model.md, Storage).
    ====================================================================== */
 
 import {
@@ -26,6 +30,55 @@ import {
 } from "../../design-system/theme/preferences.js"
 
 export const PREFERENCES = Object.freeze(["lang", "theme", "currency"])
+
+export const STORAGE_KEY = "motorcatalog"
+const DATA_VERSION = 1
+const LISTS = ["profiles", "cars", "serviceEntries", "tasks"]
+
+const isProfile = (p) => typeof p?.id === "string" && typeof p.name === "string"
+
+// The saved data, or null when it is missing, broken or the wrong shape.
+// An active id that matches no profile is dropped, so the picker shows.
+export function loadData() {
+	let data
+	try {
+		data = JSON.parse(globalThis.localStorage.getItem(STORAGE_KEY))
+	} catch {
+		return null
+	}
+	if (data?.version !== DATA_VERSION) return null
+	if (!LISTS.every((name) => Array.isArray(data[name]))) return null
+	if (!data.profiles.every(isProfile)) return null
+	const active = data.profiles.some((p) => p.id === data.activeProfileId)
+	return {
+		version: DATA_VERSION,
+		activeProfileId: active ? data.activeProfileId : null,
+		...Object.fromEntries(LISTS.map((name) => [name, data[name]])),
+	}
+}
+
+// A write that fails (private mode, storage full) is swallowed: the model
+// still holds the data for the open page.
+function saveData(data) {
+	try {
+		globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+	} catch {}
+}
+
+// The trimmed name and an error text key, or null when the name is fine.
+// Names are compared without case, so "Malin" and "malin" can't both exist.
+export function validateProfileName(input, profiles, max) {
+	const name = input.trim()
+	const taken = (p) => p.name.toLocaleLowerCase() === name.toLocaleLowerCase()
+	let error = null
+	if (name === "") error = "profile.error.required"
+	else if (name.length > max) error = "profile.error.tooLong"
+	else if (profiles.some(taken)) error = "profile.error.taken"
+	return { name, error }
+}
+
+const activeProfile = ({ profiles, activeProfileId }) =>
+	profiles.find((p) => p.id === activeProfileId) ?? null
 
 // The currency of the first navigator.languages entry whose region is in the
 // table; the base currency when no entry carries a mapped region.
@@ -67,11 +120,20 @@ export function createController({ model, view, i18n, config, languages }) {
 
 	function init() {
 		model.app.preferences = readPreferences({ i18n, config, languages })
+		const saved = loadData()
+		if (saved) model.data = saved
+		model.app.page = model.data.activeProfileId ? "garage" : "profiles"
 
 		view.bindActions({
 			"set-lang": (_event, target) => choose("lang", target.dataset.lang),
 			"set-theme": (_event, target) => choose("theme", target.dataset.value),
 			"set-currency": (_event, target) => choose("currency", target.dataset.currency),
+			"profile-name": (_event, target) => {
+				model.inputs.profile.name = target.value // no redraw while typing
+			},
+			"create-profile": createProfile,
+			"choose-profile": (_event, target) => chooseProfile(target.dataset.id),
+			"switch-profile": () => setActiveProfile(null),
 			// actionName: (event, target) => { change model, then render() }
 		})
 
@@ -87,10 +149,54 @@ export function createController({ model, view, i18n, config, languages }) {
 	// Every change to the model ends here: work out the derived values,
 	// then redraw.
 	function render() {
-		const derived = resolvePreferences(model.app.preferences)
+		const derived = {
+			...resolvePreferences(model.app.preferences),
+			profile: activeProfile(model.data),
+		}
 		view.render(model, derived)
 		syncHeader(derived)
 		syncDocument(derived)
+	}
+
+	// A new page: draw it, then move focus to its heading so a screen
+	// reader announces where the user landed.
+	function go(page) {
+		model.app.page = page
+		render()
+		view.focusHeading()
+	}
+
+	// The profile form was submitted. An invalid name stays on the page
+	// with its error, and focus goes back to the field.
+	function createProfile() {
+		const { name, error } = validateProfileName(
+			model.inputs.profile.name,
+			model.data.profiles,
+			config.profileNameMax
+		)
+		if (error) {
+			model.inputs.errors = { name: error }
+			render()
+			view.focusField("profile-name")
+			return
+		}
+		const profile = { id: crypto.randomUUID(), name }
+		model.data.profiles.push(profile)
+		setActiveProfile(profile.id)
+	}
+
+	function chooseProfile(id) {
+		if (model.data.profiles.some((p) => p.id === id)) setActiveProfile(id)
+	}
+
+	// A profile id opens its garage; null opens the picker. Either way the
+	// profile form starts empty next time.
+	function setActiveProfile(id) {
+		model.data.activeProfileId = id
+		saveData(model.data)
+		model.inputs.profile.name = ""
+		model.inputs.errors = {}
+		go(id ? "garage" : "profiles")
 	}
 
 	// An explicit choice, or "" / null for the System row. A repeat of the
@@ -125,12 +231,16 @@ export function createController({ model, view, i18n, config, languages }) {
 		view.focusPicker(name)
 	}
 
-	// The header holds the pickers and is re-rendered only when one of the
-	// three preferences (or what System resolves to) changes, so unrelated
-	// updates never tear an open picker down.
+	// The header holds the pickers and the active profile. It is re-rendered
+	// only when one of the three preferences (or what System resolves to)
+	// or the active profile changes, so unrelated updates never tear an
+	// open picker down.
 	function syncHeader(derived) {
 		const { chosen, system } = model.app.preferences
-		const key = JSON.stringify(PREFERENCES.map((name) => [chosen[name], system[name]]))
+		const key = JSON.stringify([
+			...PREFERENCES.map((name) => [chosen[name], system[name]]),
+			derived.profile && [derived.profile.id, derived.profile.name],
+		])
 		if (key === headerKey) return
 		headerKey = key
 		view.renderHeader(model, derived)
