@@ -1,5 +1,5 @@
 /* ======================================================================
-   tests/view.test.js: the header renders what the model offers
+   tests/view.test.js: the header and the pages render the model
    The view is rendered into jsdom (already a dev dependency for the
    a11y tests) and the markup is asserted on. Axe runs over the same
    markup in tests/a11y/view.test.js.
@@ -23,7 +23,16 @@ afterEach(() => dom?.window.close())
 
 // What the controller hands the view: a clone of the model with these
 // choices and system values, and the derived values worked out from them.
-function screen({ chosen = {}, system = {} } = {}) {
+// `profiles` are names (ids p0, p1, ...), `active` the index of the active one.
+function screen({
+	chosen = {},
+	system = {},
+	page = "profiles",
+	profiles = [],
+	active = null,
+	name = "",
+	error = null,
+} = {}) {
 	const model = structuredClone(initialModel)
 	Object.assign(model.app.preferences.chosen, chosen)
 	Object.assign(
@@ -31,7 +40,13 @@ function screen({ chosen = {}, system = {} } = {}) {
 		{ lang: "nb", theme: "dark", currency: "NOK" },
 		system
 	)
-	return { model, derived: resolvePreferences(model.app.preferences) }
+	model.app.page = page
+	model.data.profiles = profiles.map((profileName, i) => ({ id: `p${i}`, name: profileName }))
+	model.data.activeProfileId = active === null ? null : `p${active}`
+	model.inputs.profile.name = name
+	if (error) model.inputs.errors = { name: error }
+	const profile = model.data.profiles.find((p) => p.id === model.data.activeProfileId) ?? null
+	return { model, derived: { ...resolvePreferences(model.app.preferences), profile } }
 }
 
 // `offer` is the config the view is built with: three currencies by
@@ -144,16 +159,8 @@ test("currency rows carry a decorative flag, the ISO code and the Intl name; the
 	)
 })
 
-test("the example price is rendered with money(): the language sets the format, the currency the symbol", () => {
-	const nb = mount(screen({ chosen: { lang: "nb", currency: "NOK" } }))
-	assert.ok(nb.main.textContent.includes(i18n.money("nb", 949, "NOK")))
-	dom.window.close()
-	const en = mount(screen({ chosen: { lang: "en", currency: "EUR" } }))
-	assert.ok(en.main.textContent.includes(i18n.money("en", 949, "EUR")))
-})
-
 test("a bundle string with markup is rendered as text, not as HTML", () => {
-	const hostile = createTranslator({ en: { ...bundles.en, "app.title": "<b>x</b>" } })
+	const hostile = createTranslator({ en: { ...bundles.en, "welcome.title": "<b>x</b>" } })
 	dom = new JSDOM(
 		`<!doctype html><html><body><header id="header"></header><main id="main"></main></body></html>`
 	)
@@ -177,4 +184,120 @@ test("the view only reads the model: a deep-frozen model renders without throwin
 		model.app.preferences.chosen.lang = "nb"
 	}, TypeError)
 	assert.doesNotThrow(() => mount({ model, derived }))
+})
+
+// ---- Profiles and the garage (#7) ----
+
+const en = { chosen: { lang: "en" } }
+const text = (el) => el?.textContent.trim()
+
+test("a first visit shows the welcome page: a heading, a short intro and the create form", () => {
+	const { main } = mount(screen(en))
+	const h1 = main.querySelector("h1")
+	assert.equal(text(h1), bundles.en["welcome.title"])
+	assert.equal(h1.getAttribute("tabindex"), "-1")
+	assert.equal(text(main.querySelector("h1 + p")), bundles.en["welcome.intro"])
+	assert.equal(main.querySelector("[data-action='choose-profile']"), null)
+	assert.equal(main.querySelector("h2"), null)
+	const form = main.querySelector("form[data-submit='create-profile']")
+	assert.ok(form.hasAttribute("novalidate"))
+	const input = form.querySelector("#profile-name")
+	assert.equal(text(form.querySelector("label[for='profile-name']")), bundles.en["profile.name"])
+	assert.equal(input.getAttribute("maxlength"), "40")
+	assert.ok(input.required)
+	assert.equal(input.dataset.input, "profile-name")
+	assert.equal(input.hasAttribute("aria-invalid"), false)
+	const submit = form.querySelector("button[type='submit']")
+	assert.ok(submit.classList.contains("btn-primary"))
+	assert.equal(text(submit), bundles.en["profile.create"])
+})
+
+test("with profiles the page lists one button per profile, then the form under its own heading", () => {
+	const { main } = mount(screen({ ...en, profiles: ["Malin", "Rune"] }))
+	assert.equal(text(main.querySelector("h1")), bundles.en["profiles.title"])
+	const buttons = [...main.querySelectorAll("[data-action='choose-profile']")]
+	assert.deepEqual(
+		buttons.map((b) => [b.dataset.id, text(b), b.type]),
+		[
+			["p0", "Malin", "button"],
+			["p1", "Rune", "button"],
+		]
+	)
+	const form = main.querySelector("form[data-submit='create-profile']")
+	assert.equal(text(form.querySelector("h2")), bundles.en["profiles.new"])
+})
+
+test("an error shows as text tied to the field, and the typed name is kept", () => {
+	const { main } = mount(screen({ ...en, name: "  ", error: "profile.error.required" }))
+	const input = main.querySelector("#profile-name")
+	assert.equal(input.getAttribute("aria-invalid"), "true")
+	const error = main.querySelector(`#${input.getAttribute("aria-describedby")}`)
+	assert.equal(text(error), bundles.en["profile.error.required"])
+	assert.equal(input.value, "  ")
+})
+
+test("the too-long error names the limit from config", () => {
+	const { main } = mount(screen({ ...en, error: "profile.error.tooLong" }))
+	assert.match(text(main.querySelector("#profile-name-error")), /\b40\b/)
+})
+
+test("a profile name with markup is rendered as text, not as HTML", () => {
+	const { main } = mount(screen({ ...en, profiles: ["<b>x</b>"] }))
+	assert.equal(main.querySelector("b"), null)
+	assert.equal(text(main.querySelector("[data-action='choose-profile']")), "<b>x</b>")
+	dom.window.close()
+	const { header } = mount(screen({ ...en, page: "garage", profiles: ["<b>x</b>"], active: 0 }))
+	assert.equal(header.querySelector("b"), null)
+	assert.equal(text(header.querySelector(".header-profile-name")), "<b>x</b>")
+})
+
+test("the garage has its heading and an empty line until cars arrive", () => {
+	const { main } = mount(screen({ ...en, page: "garage", profiles: ["Malin"], active: 0 }))
+	const h1 = main.querySelector("h1")
+	assert.equal(text(h1), bundles.en["garage.title"])
+	assert.equal(h1.getAttribute("tabindex"), "-1")
+	assert.equal(text(main.querySelector("h1 + p")), bundles.en["garage.empty"])
+	assert.equal(main.querySelector("form"), null)
+})
+
+test("the header shows the active profile and Switch profile, and neither without one", () => {
+	const withProfile = mount(screen({ ...en, page: "garage", profiles: ["Malin"], active: 0 }))
+	const row = withProfile.header.querySelector(".header-profile")
+	assert.equal(text(row.querySelector(".header-profile-label")), bundles.en["profile.label"])
+	assert.equal(text(row.querySelector(".header-profile-name")), "Malin")
+	const button = row.querySelector("button[data-action='switch-profile']")
+	assert.equal(button.type, "button")
+	assert.equal(text(button), bundles.en["profile.switch"])
+	dom.window.close()
+	const without = mount(screen(en))
+	assert.equal(without.header.querySelector(".header-profile"), null)
+	assert.equal(without.header.querySelector("[data-action='switch-profile']"), null)
+})
+
+test("bindActions routes clicks, form submits and typing by their own attributes", () => {
+	const { main, view } = mount(screen({ ...en, profiles: ["Malin"] }))
+	const calls = []
+	view.bindActions({
+		"choose-profile": (_event, target) => calls.push(["choose", target.dataset.id]),
+		"create-profile": (event) => calls.push(["create", event.defaultPrevented]),
+		"profile-name": (_event, target) => calls.push(["type", target.value]),
+	})
+	main.querySelector("[data-action='choose-profile']").click()
+	const input = main.querySelector("#profile-name")
+	input.value = "Rune"
+	input.dispatchEvent(new dom.window.Event("input", { bubbles: true }))
+	main.querySelector("button[type='submit']").click() // one submit, and no click action
+	assert.deepEqual(calls, [
+		["choose", "p0"],
+		["type", "Rune"],
+		["create", true],
+	])
+})
+
+test("focusHeading and focusField move focus inside main", () => {
+	const { main, view } = mount(screen(en))
+	view.focusHeading()
+	assert.equal(dom.window.document.activeElement, main.querySelector("h1"))
+	view.focusField("profile-name")
+	assert.equal(dom.window.document.activeElement, main.querySelector("#profile-name"))
 })

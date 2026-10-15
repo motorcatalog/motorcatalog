@@ -9,3 +9,47 @@
 
 /* The header pickers come from the design system (components/picker.css);
    nothing project-specific is needed for them. Project styles go below. */
+
+/* A field's error, under the field. Red text only would rely on colour,
+   so the message itself says what is wrong. */
+.field-error {
+	color: var(--danger);
+	font-size: var(--text-sm);
+}
+.input[aria-invalid="true"] {
+	border-color: var(--danger);
+}
+
+/* A page heading takes focus after a page change so it is announced. It is
+   not a control, so it draws no focus ring. */
+main h1[tabindex="-1"]:focus {
+	outline: none;
+}
+
+/* The profile picker: one full-width button per profile, no bullets. */
+.profile-list {
+	list-style: none;
+	padding: 0;
+}
+
+/* The active profile, on its own row under the wordmark and the pickers. */
+.header-profile {
+	margin-top: var(--space-3);
+	padding-top: var(--space-3);
+	border-top: 1px solid var(--line);
+}
+.header-profile-text {
+	display: flex;
+	align-items: baseline;
+	gap: var(--space-2);
+	min-width: 0;
+}
+.header-profile-label {
+	color: var(--text-muted);
+	font-size: var(--text-sm);
+}
+.header-profile-name {
+	color: var(--text);
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
