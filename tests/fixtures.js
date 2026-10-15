@@ -1,5 +1,5 @@
 /* ======================================================================
-   tests/fixtures.js — shared test data
+   tests/fixtures.js: shared test data
    The app offers NOK only, so the currency picker stays hidden. The
    picker code is kept for the day we add a currency, and these tests
    keep it working by feeding it the scaffold's three-currency config.

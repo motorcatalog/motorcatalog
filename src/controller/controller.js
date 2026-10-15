@@ -1,13 +1,18 @@
 /* ======================================================================
-   src/controller/controller.js — CONTROLLER
-   Behavior: handles view actions, updates the model, owns any timers.
-   Never writes HTML — that's the view's job.
+   src/controller/controller.js: CONTROLLER
+   The only code that changes the model. It handles view actions, updates
+   the model, then calls render(). It owns any timers and never writes
+   HTML: that is the view's job.
+
+   Derived values (for now the lang, theme and currency in use) are
+   worked out on every render and handed to the view beside the model.
+   They are never stored, so they never go stale.
 
    The controller is the only layer that touches localStorage, and it does
    so through design-system/theme/preferences.js: the three keys "lang",
    "theme" and "currency" hold a real option or nothing (System). A write
-   that fails (Safari private mode) is swallowed there; the model keeps
-   the choice for the open page.
+   that fails (Safari private mode) is swallowed there, and the model
+   keeps the choice for the open page.
    ====================================================================== */
 
 import {
@@ -19,7 +24,24 @@ import {
 	watchSystemTheme,
 	writePreference,
 } from "../../design-system/theme/preferences.js"
-import { PREFERENCES, systemCurrency } from "../model/model.js"
+
+export const PREFERENCES = Object.freeze(["lang", "theme", "currency"])
+
+// The currency of the first navigator.languages entry whose region is in the
+// table; the base currency when no entry carries a mapped region.
+export function systemCurrency(languages, { regions, baseCurrency }) {
+	for (const tag of languages ?? []) {
+		const region = String(tag).split("-")[1]
+		const currency = region && regions[region.toUpperCase()]
+		if (currency) return currency
+	}
+	return baseCurrency
+}
+
+// The value in use per preference: the choice, or System's value.
+export function resolvePreferences({ chosen, system }) {
+	return Object.fromEntries(PREFERENCES.map((name) => [name, chosen[name] ?? system[name]]))
+}
 
 // Read once per page load: the stored choice per preference (null when
 // absent or invalid; an invalid value is removed) and what System resolves
@@ -39,28 +61,55 @@ export function readPreferences({ i18n, config, languages = navigator.languages 
 	}
 }
 
-export function createController({ model, view, i18n }) {
+// `languages` defaults to navigator.languages; tests pass their own.
+export function createController({ model, view, i18n, config, languages }) {
 	let headerKey = null
 
 	function init() {
-		model.subscribe((state) => view.render(state))
-		model.subscribe(syncHeader)
-		model.subscribe(syncDocument)
+		model.app.preferences = readPreferences({ i18n, config, languages })
 
 		view.bindActions({
 			"set-lang": (_event, target) => choose("lang", target.dataset.lang),
 			"set-theme": (_event, target) => choose("theme", target.dataset.value),
 			"set-currency": (_event, target) => choose("currency", target.dataset.currency),
-			// actionName: (event, target) => { update model state, then model.notify() }
+			// actionName: (event, target) => { change model, then render() }
 		})
 
-		// While no theme key is stored the page follows the OS; another tab
+		// While no theme key is stored the page follows the OS. Another tab
 		// changing or clearing the key is applied here too. Both go through
 		// the model so the header re-renders with the right icon and row.
-		watchSystemTheme((theme) => model.setSystem("theme", theme))
-		watchStorage((stored) => model.setPreference("theme", stored))
+		watchSystemTheme((theme) => setSystem("theme", theme))
+		watchStorage((stored) => setPreference("theme", stored))
 
-		model.notify() // first render
+		render() // first render
+	}
+
+	// Every change to the model ends here: work out the derived values,
+	// then redraw.
+	function render() {
+		const derived = resolvePreferences(model.app.preferences)
+		view.render(model, derived)
+		syncHeader(derived)
+		syncDocument(derived)
+	}
+
+	// An explicit choice, or "" / null for the System row. A repeat of the
+	// current choice changes nothing, so nothing is redrawn.
+	function setPreference(name, value) {
+		const next = value === "" || value === undefined ? null : value
+		const { chosen } = model.app.preferences
+		if (next === chosen[name]) return
+		chosen[name] = next
+		render()
+	}
+
+	// The live system value changed (the OS switched theme). It only shows
+	// while nothing is chosen, but the System row names it either way.
+	function setSystem(name, value) {
+		const { system } = model.app.preferences
+		if (value === system[name]) return
+		system[name] = value
+		render()
 	}
 
 	// A picker row was chosen. "" is the System row and removes the key.
@@ -69,28 +118,29 @@ export function createController({ model, view, i18n }) {
 	// is the audible result of the press.
 	function choose(name, value) {
 		writePreference(name, value)
-		model.setPreference(name, value)
+		setPreference(name, value)
 		view.focusPicker(name)
 	}
 
 	// The header holds the pickers and is re-rendered only when one of the
 	// three preferences (or what System resolves to) changes, so unrelated
-	// state updates never tear an open picker down.
-	function syncHeader(state) {
-		const key = JSON.stringify(PREFERENCES.map((name) => [state.chosen[name], state.system[name]]))
+	// updates never tear an open picker down.
+	function syncHeader(derived) {
+		const { chosen, system } = model.app.preferences
+		const key = JSON.stringify(PREFERENCES.map((name) => [chosen[name], system[name]]))
 		if (key === headerKey) return
 		headerKey = key
-		view.renderHeader(state)
+		view.renderHeader(model, derived)
 	}
 
 	// Document-level, not HTML: screen readers pick their voice from <html lang>,
 	// the tab title should read in the active language, and the theme lives on
 	// <html data-theme> where the tokens read it.
-	function syncDocument(state) {
-		document.documentElement.lang = state.lang
-		document.title = i18n.t(state.lang, "app.title")
-		applyTheme(state.theme)
+	function syncDocument({ lang, theme }) {
+		document.documentElement.lang = lang
+		document.title = i18n.t(lang, "app.title")
+		applyTheme(theme)
 	}
 
-	return { init }
+	return { init, render }
 }
