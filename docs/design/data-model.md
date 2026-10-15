@@ -16,7 +16,7 @@ export const model = {
 }
 ```
 
-- The **controller** is the only code that changes `model`. After a change it saves `model.data` if needed and calls `view.render(model, derived)`. `derived` holds the values worked out from the model (see [Derived values](#derived-values)).
+- The **controller** is the only code that changes `model`. After a change it saves `model.data` if needed and calls its `render()`, which hands `model` and `derived` to the view. `derived` holds the values worked out from the model (see [Derived values](#derived-values)).
 - The **view** reads `model` and renders HTML. It never changes `model`.
 - Anything that can be worked out from stored data is **not** stored. The controller computes it when it is needed (see [Derived values](#derived-values)).
 - Fixed project setup, such as the currencies on offer, lives in `src/config.js`. It is not state.

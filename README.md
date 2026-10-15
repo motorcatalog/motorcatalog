@@ -67,7 +67,7 @@ All UI text lives in `src/locales/en.json` and `src/locales/nb.json`. Both files
 
 - `src/model/`: one plain object with the app's state and data. No functions, no DOM.
 - `src/config.js`: fixed project setup, such as the currencies on offer.
-- `src/view/`: renders HTML from state and passes clicks on to the controller.
+- `src/view/`: renders HTML from the model and passes clicks on to the controller.
 - `src/controller/`: handles input and updates the model.
 - `src/locales/`: UI text, one file per language.
 - `src/styles/index.css`: the CSS entry. Design system, brand palette and Tailwind.
