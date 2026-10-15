@@ -10,17 +10,7 @@
    controller reads and writes storage; this model only holds the values.
    ====================================================================== */
 
-// What the project offers. A picker renders only when a list here has more
-// than one entry. `regions` maps the region of a navigator.languages entry
-// to a currency and lists only regions whose currency is in `currencies`.
-// `flags` names the design-system/assets/flags/<cc>.svg file per currency.
-export const config = Object.freeze({
-	// Service costs are in NOK only, so the currency picker stays hidden.
-	currencies: ["NOK"],
-	baseCurrency: "NOK",
-	regions: { NO: "NOK" },
-	flags: { NOK: "no" },
-})
+import { config } from "../config.js"
 
 export const PREFERENCES = Object.freeze(["lang", "theme", "currency"])
 

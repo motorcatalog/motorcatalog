@@ -8,7 +8,8 @@
 
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { config, createModel, systemCurrency } from "../src/model/model.js"
+import { config } from "../src/config.js"
+import { createModel, systemCurrency } from "../src/model/model.js"
 import { MULTI_CURRENCY } from "./fixtures.js"
 
 const system = { lang: "nb", theme: "dark", currency: "NOK" }

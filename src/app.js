@@ -5,9 +5,10 @@
    ====================================================================== */
 
 import { createTranslator } from "../i18n/index.js"
+import { config } from "./config.js"
 import { createController, readPreferences } from "./controller/controller.js"
 import { bundles, FALLBACK_LANG } from "./locales/index.js"
-import { config, createModel } from "./model/model.js"
+import { createModel } from "./model/model.js"
 import { createView } from "./view/view.js"
 
 export function createApp() {

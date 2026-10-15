@@ -5,7 +5,7 @@
    keep it working by feeding it the scaffold's three-currency config.
    ====================================================================== */
 
-import { config } from "../src/model/model.js"
+import { config } from "../src/config.js"
 
 export const MULTI_CURRENCY = Object.freeze({
 	...config,
