@@ -2,7 +2,7 @@
 
 The shape of `src/model/model.js`: what MotorCatalog stores, what is only screen state, and what is worked out on the fly. We designed it from the mockups in [`mockups/`](mockups/) and the feature list in the README.
 
-Status: draft, waiting for approval before we code against it.
+Status: approved 15.10.2026. The code follows it.
 
 ## The MVC rule
 
@@ -16,9 +16,10 @@ export const model = {
 }
 ```
 
-- The **controller** is the only code that changes `model`. After a change it saves `model.data` if needed and calls `view.render(model)`.
+- The **controller** is the only code that changes `model`. After a change it saves `model.data` if needed and calls `view.render(model, derived)`. `derived` holds the values worked out from the model (see [Derived values](#derived-values)).
 - The **view** reads `model` and renders HTML. It never changes `model`.
 - Anything that can be worked out from stored data is **not** stored. The controller computes it when it is needed (see [Derived values](#derived-values)).
+- Fixed project setup, such as the currencies on offer, lives in `src/config.js`. It is not state.
 
 ## Entities
 
@@ -135,8 +136,8 @@ export const model = {
     historyFilter: "all", // all | service | repair | other
     costsYear: null, // null = the current year
     preferences: {
-      chosen: { lang: null, theme: null }, // null = follow the system
-      system: { lang: "en", theme: "dark" },
+      chosen: { lang: null, theme: null, currency: null }, // null = follow the system
+      system: { lang: "en", theme: "dark", currency: "NOK" },
     },
   },
   inputs: {
@@ -170,6 +171,8 @@ export const model = {
 
 `preferences` keep the scaffold's rule: the value used is the chosen one if there is one, otherwise the system's. They are saved under their own localStorage keys, because they belong to the device rather than to a profile.
 
+`currency` is kept for the day we offer more than one. With NOK only, its picker stays hidden.
+
 ## Storage
 
 - `model.data` is saved to localStorage as JSON under the single key `motorcatalog`.
@@ -202,10 +205,11 @@ Deleting a car deletes its service entries and tasks. Deleting a profile deletes
 
 ## Derived values
 
-The controller works these out from `data` each time it renders. They are never stored, so they can never go stale.
+The controller works these out from the model each time it renders. They are never stored, so they can never go stale.
 
 | Value | Worked out from |
 |---|---|
+| The language, theme and currency in use | `app.preferences`: the choice, or the system value when nothing is chosen |
 | EU inspection status: OK, due soon or overdue | `euInspectionDue` compared with today |
 | Task status: open, due soon or overdue | `dueDate` and `dueMileage` compared with today and `car.mileage` |
 | Status line on a car card | The car's EU status and its most urgent open task |

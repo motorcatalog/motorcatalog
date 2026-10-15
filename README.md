@@ -65,7 +65,8 @@ All UI text lives in `src/locales/en.json` and `src/locales/nb.json`. Both files
 
 ## Project structure
 
-- `src/model/`: state and data. No DOM.
+- `src/model/`: one plain object with the app's state and data. No functions, no DOM.
+- `src/config.js`: fixed project setup, such as the currencies on offer.
 - `src/view/`: renders HTML from state and passes clicks on to the controller.
 - `src/controller/`: handles input and updates the model.
 - `src/locales/`: UI text, one file per language.
