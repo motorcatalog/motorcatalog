@@ -2,17 +2,19 @@
    src/view/view.js: VIEW
    Renders HTML from the model and forwards user actions to the controller.
    It only reads the model. No timers.
-   Interactive elements carry a data-action attribute
-   (e.g. <button data-action="add">); bindActions routes them by name.
+   Interactive elements carry data-action (click), data-submit (form) or
+   data-input (typing), e.g. <button data-action="add">; bindActions
+   routes them by name.
    Every user-facing string goes through t(), never a literal.
    Every string goes through esc() before it lands in innerHTML, Intl
    output included. Never concatenate raw.
 
    Both render functions take (model, derived). `derived` holds what the
    controller worked out from the model, such as the lang, theme and
-   currency in use. Two roots: the header (wordmark + the preference
-   pickers) is drawn by renderHeader() and only when a preference
-   changes; everything else is render().
+   currency in use and the active profile. Two roots: the header
+   (wordmark, the preference pickers and the active profile) is drawn by
+   renderHeader() and only when one of those changes; the page in
+   model.app.page is render().
    ====================================================================== */
 
 import { icon } from "../../design-system/components/icons.js"
@@ -51,19 +53,62 @@ export function createView({ header, main }, i18n, config) {
 		return new Intl.DisplayNames([lang], { type: "currency" }).of(code) || code
 	}
 
-	function render(_model, derived) {
+	// One function per page, picked by model.app.page. Every page opens with
+	// an h1 that takes focus (tabindex="-1") when the controller moves to it.
+	const PAGES = { profiles: profilesPage, garage: garagePage }
+
+	function render(model, derived) {
 		const t = (key, vars) => i18n.t(derived.lang, key, vars)
+		const page = PAGES[model.app.page] ?? garagePage
+		main.innerHTML = page(model, derived, t)
+	}
 
-		// An example price: data is { amount, currency }, never a price string.
-		// The language picks separators and symbol placement, the currency the symbol.
-		const price = { amount: 949, currency: derived.currency }
+	// The welcome page on a first visit; the picker once profiles exist.
+	// The create form is on both, so a second person can be added.
+	function profilesPage(model, _derived, t) {
+		const { profiles } = model.data
+		if (profiles.length === 0) {
+			return `
+				<h1 tabindex="-1">${esc(t("welcome.title"))}</h1>
+				<p class="text-muted-foreground">${esc(t("welcome.intro"))}</p>
+				${profileForm(model, t)}`
+		}
+		const buttons = profiles.map(
+			(p) =>
+				`<li><button class="btn btn-full" type="button" data-action="choose-profile" data-id="${esc(p.id)}">${esc(p.name)}</button></li>`
+		)
+		return `
+			<h1 tabindex="-1">${esc(t("profiles.title"))}</h1>
+			<ul class="profile-list stack stack-sm" role="list">${buttons.join("")}</ul>
+			${profileForm(model, t, t("profiles.new"))}`
+	}
 
-		main.innerHTML = `
-			<h1>${esc(t("app.title"))}</h1>
-			<p class="text-muted-foreground">${esc(t("app.tagline"))}</p>
-			<p><strong>${esc(t("price.example"))}:</strong> ${esc(i18n.money(derived.lang, price.amount, price.currency))}</p>
-		`
-		// build the rest of the UI from model and derived here
+	// novalidate: the error is our own text under the field, not the
+	// browser's bubble. maxlength stops typing at the limit; the controller
+	// still checks it, since a value can arrive by other ways.
+	function profileForm(model, t, heading) {
+		const error = model.inputs.errors.name
+		const errorId = "profile-name-error"
+		const invalid = error ? ` aria-invalid="true" aria-describedby="${errorId}"` : ""
+		return `
+			<form class="stack" data-submit="create-profile" novalidate>
+				${heading ? `<h2 class="text-lg">${esc(heading)}</h2>` : ""}
+				<div class="field">
+					<label class="label" for="profile-name">${esc(t("profile.name"))}</label>
+					<input class="input" id="profile-name" name="name" type="text" autocomplete="off" required
+						maxlength="${config.profileNameMax}" data-input="profile-name"
+						value="${esc(model.inputs.profile.name)}"${invalid} />
+					${error ? `<p class="field-error" id="${errorId}">${esc(t(error, { max: config.profileNameMax }))}</p>` : ""}
+				</div>
+				<div><button class="btn btn-primary" type="submit">${esc(t("profile.create"))}</button></div>
+			</form>`
+	}
+
+	// Cars arrive with #8 and #9; until then the garage says it is empty.
+	function garagePage(_model, _derived, t) {
+		return `
+			<h1 tabindex="-1">${esc(t("garage.title"))}</h1>
+			<p class="text-muted-foreground">${esc(t("garage.empty"))}</p>`
 	}
 
 	// One row of a picker. The label sits in one span so text around a <span lang>
@@ -194,7 +239,21 @@ export function createView({ header, main }, i18n, config) {
 				<span class="brand font-heading text-xl font-medium">${esc(WORDMARK[0])}<span class="text-brass">${esc(WORDMARK[1])}</span></span>
 				<div class="cluster cluster-sm">${pickers.join("")}</div>
 			</div>
+			${derived.profile ? profileRow(derived.profile, t) : ""}
 		`
+	}
+
+	// A second row under the wordmark, so the pickers keep their place on a
+	// phone. The label is set apart from the name by size and ink.
+	function profileRow(profile, t) {
+		return `
+			<div class="header-profile cluster-between">
+				<p class="header-profile-text">
+					<span class="header-profile-label">${esc(t("profile.label"))}</span>
+					<span class="header-profile-name">${esc(profile.name)}</span>
+				</p>
+				<button class="btn" type="button" data-action="switch-profile">${esc(t("profile.switch"))}</button>
+			</div>`
 	}
 
 	// After a choice the header is re-rendered, so focus is put back on the
@@ -203,16 +262,36 @@ export function createView({ header, main }, i18n, config) {
 		header.querySelector(`details[data-picker="${name}"] > summary`)?.focus()
 	}
 
-	// One delegated listener per root; handlers = { actionName: (event, target) => {} }
+	// After a page change: the new page's heading, so it is announced.
+	function focusHeading() {
+		main.querySelector("h1")?.focus()
+	}
+
+	// After a failed submit: the field with the error.
+	function focusField(id) {
+		main.querySelector(`#${id}`)?.focus()
+	}
+
+	// One delegated listener per event type and root. Each type has its own
+	// attribute, so a click on a submit button never fires the form's action:
+	//   <button data-action="x">  click
+	//   <form data-submit="x">    submit (the page never reloads)
+	//   <input data-input="x">    every keystroke
+	// handlers = { name: (event, target) => {} }
+	const EVENTS = { click: "action", submit: "submit", input: "input" }
+
 	function bindActions(handlers) {
 		for (const root of [header, main]) {
-			root.addEventListener("click", (event) => {
-				const target = event.target.closest("[data-action]")
-				if (!target) return
-				handlers[target.dataset.action]?.(event, target)
-			})
+			for (const [type, attr] of Object.entries(EVENTS)) {
+				root.addEventListener(type, (event) => {
+					const target = event.target.closest(`[data-${attr}]`)
+					if (!target) return
+					if (type === "submit") event.preventDefault()
+					handlers[target.dataset[attr]]?.(event, target)
+				})
+			}
 		}
 	}
 
-	return { render, renderHeader, focusPicker, bindActions }
+	return { render, renderHeader, focusPicker, focusHeading, focusField, bindActions }
 }

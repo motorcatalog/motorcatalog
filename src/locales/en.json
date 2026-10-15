@@ -1,11 +1,22 @@
 {
 	"app.title": "MotorCatalog",
-	"app.tagline": "Your car's service history, in one place.",
 	"picker.language": "Language",
 	"picker.theme": "Theme",
 	"picker.currency": "Currency",
 	"picker.system": "System ({value})",
 	"theme.light": "Light",
 	"theme.dark": "Dark",
-	"price.example": "Example price"
+	"welcome.title": "Welcome to MotorCatalog",
+	"welcome.intro": "Your car's service history, in one place. Create a profile to start. It keeps your cars apart from other people's on this device.",
+	"profiles.title": "Choose a profile",
+	"profiles.new": "New profile",
+	"profile.label": "Profile",
+	"profile.name": "Name",
+	"profile.create": "Create profile",
+	"profile.switch": "Switch profile",
+	"profile.error.required": "Enter a name.",
+	"profile.error.tooLong": "The name can be at most {max} characters.",
+	"profile.error.taken": "A profile with this name already exists.",
+	"garage.title": "My garage",
+	"garage.empty": "No cars yet."
 }

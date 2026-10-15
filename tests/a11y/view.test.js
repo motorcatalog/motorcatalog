@@ -59,6 +59,37 @@ for (const name of ["lang", "theme", "currency"]) {
 	})
 }
 
+// Every page the profile story adds, with the header row for the active
+// profile where there is one.
+const PAGES = {
+	"the welcome page": { page: "profiles", profiles: [], active: null },
+	"the profile picker": { page: "profiles", profiles: ["Malin", "Rune"], active: null },
+	"the form with an error": {
+		page: "profiles",
+		profiles: [],
+		active: null,
+		error: "profile.error.required",
+	},
+	"the garage with an active profile": { page: "garage", profiles: ["Malin"], active: 0 },
+}
+
+for (const [name, { page, profiles, active, error }] of Object.entries(PAGES)) {
+	test(`${name} has no axe violations`, async () => {
+		dom = createMount("en")
+		const view = createView({ header: dom.header, main: dom.mount }, i18n, MULTI_CURRENCY)
+		const { model, derived } = screenFor("en")
+		model.app.page = page
+		model.data.profiles = profiles.map((n, i) => ({ id: `p${i}`, name: n }))
+		model.data.activeProfileId = active === null ? null : `p${active}`
+		if (error) model.inputs.errors = { name: error }
+		derived.profile = model.data.profiles[active] ?? null
+		view.renderHeader(model, derived)
+		view.render(model, derived)
+		assert.ok(dom.mount.querySelector("h1"))
+		assert.deepEqual(await axeComponent(dom.body), [])
+	})
+}
+
 // Proves the harness reports real problems instead of passing silently.
 // A visible glyph counts as text, so the icon is hidden from assistive
 // technology the way a real icon would be; the button then has no name.

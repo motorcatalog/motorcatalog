@@ -1,6 +1,6 @@
 /* ======================================================================
-   tests/controller.test.js: the controller owns the model and the
-   three stored keys
+   tests/controller.test.js: the controller owns the model, the three
+   preference keys and the saved data under "motorcatalog"
    localStorage, document, matchMedia and window listeners are stubbed
    so the controller runs under node's built-in runner. The view is a
    recorder: it never renders. Every test works on a clone of the model,
@@ -13,8 +13,11 @@ import { createTranslator } from "../i18n/index.js"
 import { config } from "../src/config.js"
 import {
 	createController,
+	loadData,
 	resolvePreferences,
+	STORAGE_KEY,
 	systemCurrency,
+	validateProfileName,
 } from "../src/controller/controller.js"
 import { bundles, FALLBACK_LANG } from "../src/locales/index.js"
 import { model as initialModel } from "../src/model/model.js"
@@ -48,6 +51,8 @@ function fakeView() {
 		renders: 0,
 		headerRenders: 0,
 		focused: [],
+		headings: 0,
+		fields: [],
 		handlers: {},
 		derived: null,
 		render(_model, derived) {
@@ -56,6 +61,8 @@ function fakeView() {
 		},
 		renderHeader: () => view.headerRenders++,
 		focusPicker: (name) => view.focused.push(name),
+		focusHeading: () => view.headings++,
+		focusField: (id) => view.fields.push(id),
 		bindActions: (handlers) => Object.assign(view.handlers, handlers),
 	}
 	return view
@@ -133,7 +140,7 @@ afterEach(() => {
 test("first load resolves every preference from the browser when nothing is stored", () => {
 	const { model, view } = boot(fakeStorage())
 	assert.deepEqual(model.app.preferences.chosen, { lang: null, theme: null, currency: null })
-	assert.deepEqual(view.derived, { lang: "nb", theme: "dark", currency: "NOK" }) // no matchMedia: the DS default
+	assert.deepEqual(view.derived, { lang: "nb", theme: "dark", currency: "NOK", profile: null }) // no matchMedia: the DS default
 	assert.equal(globalThis.document.documentElement.lang, "nb")
 	assert.equal(globalThis.document.documentElement.dataset.theme, "dark")
 	assert.equal(globalThis.document.title, bundles.nb["app.title"])
@@ -279,4 +286,170 @@ test("the region table only maps to currencies the project offers", () => {
 	for (const currency of config.currencies) {
 		assert.ok(config.flags[currency], `${currency} has no flag`)
 	}
+})
+
+// ---- Profiles and saved data (#7) ----
+
+// Saved data as the app writes it: one profile per name, ids p0, p1, ...
+// `active` is the index of the active profile, or null.
+function dataWith(names, active = 0) {
+	return JSON.stringify({
+		version: 1,
+		activeProfileId: active === null ? null : `p${active}`,
+		profiles: names.map((name, i) => ({ id: `p${i}`, name })),
+		cars: [],
+		serviceEntries: [],
+		tasks: [],
+	})
+}
+
+// What the user does: type into the name field, then submit the form.
+function createProfile(view, name) {
+	view.handlers["profile-name"](null, { value: name })
+	view.handlers["create-profile"](null, {})
+}
+
+const storedData = (storage) => JSON.parse(storage.items[STORAGE_KEY])
+
+function loadFrom(items) {
+	Object.defineProperty(globalThis, "localStorage", {
+		value: fakeStorage(items),
+		configurable: true,
+		writable: true,
+	})
+	return loadData()
+}
+
+test("loadData is null when nothing is saved, the JSON is broken or the shape is wrong", () => {
+	const valid = JSON.parse(dataWith(["Malin"]))
+	const variant = (changes) => ({ [STORAGE_KEY]: JSON.stringify({ ...valid, ...changes }) })
+	assert.equal(loadFrom({}), null)
+	assert.equal(loadFrom({ [STORAGE_KEY]: "{not json" }), null)
+	assert.equal(loadFrom({ [STORAGE_KEY]: "null" }), null)
+	assert.equal(loadFrom(variant({ version: 2 })), null)
+	assert.equal(loadFrom(variant({ cars: {} })), null)
+	assert.equal(loadFrom(variant({ profiles: [null] })), null)
+	assert.equal(loadFrom(variant({ profiles: [{ id: 1, name: "Malin" }] })), null)
+})
+
+test("loadData keeps valid data and drops an active id that matches no profile", () => {
+	assert.deepEqual(
+		loadFrom({ [STORAGE_KEY]: dataWith(["Malin"]) }),
+		JSON.parse(dataWith(["Malin"]))
+	)
+	const stale = { ...JSON.parse(dataWith(["Malin"])), activeProfileId: "gone" }
+	assert.equal(loadFrom({ [STORAGE_KEY]: JSON.stringify(stale) }).activeProfileId, null)
+})
+
+test("validateProfileName trims, requires a name, caps it at 40 and refuses a taken name in any case", () => {
+	const profiles = [{ id: "p0", name: "Malin" }]
+	const check = (name) => validateProfileName(name, profiles, config.profileNameMax)
+	assert.equal(config.profileNameMax, 40)
+	assert.deepEqual(check("  Rune  "), { name: "Rune", error: null })
+	assert.equal(check("   ").error, "profile.error.required")
+	assert.equal(check("a".repeat(40)).error, null)
+	assert.equal(check("a".repeat(41)).error, "profile.error.tooLong")
+	assert.equal(check(" malin ").error, "profile.error.taken")
+})
+
+test("a first visit with nothing saved opens the profiles page and writes nothing", () => {
+	const storage = fakeStorage()
+	const { model, view } = boot(storage)
+	assert.equal(model.app.page, "profiles")
+	assert.equal(view.derived.profile, null)
+	assert.deepEqual(storage.items, {})
+})
+
+test("broken saved data still starts the app, on the profiles page with empty data", () => {
+	const { model } = boot(fakeStorage({ [STORAGE_KEY]: "{oops" }))
+	assert.equal(model.app.page, "profiles")
+	assert.deepEqual(model.data, initialModel.data)
+})
+
+test("creating a profile saves it, makes it active and opens the garage", () => {
+	const storage = fakeStorage()
+	const { model, view } = boot(storage)
+	createProfile(view, "  Malin ")
+	assert.equal(model.data.profiles.length, 1)
+	assert.equal(model.data.profiles[0].name, "Malin")
+	assert.match(model.data.profiles[0].id, /^[0-9a-f-]{36}$/)
+	assert.equal(model.data.activeProfileId, model.data.profiles[0].id)
+	assert.deepEqual(storedData(storage), model.data)
+	assert.equal(model.app.page, "garage")
+	assert.equal(view.derived.profile.name, "Malin")
+	assert.equal(model.inputs.profile.name, "")
+	assert.equal(view.headings, 1)
+})
+
+test("typing into the name field updates the input without a redraw", () => {
+	const { model, view } = boot(fakeStorage())
+	view.handlers["profile-name"](null, { value: "Ma" })
+	assert.equal(model.inputs.profile.name, "Ma")
+	assert.equal(view.renders, 1)
+})
+
+test("an empty name shows an error, saves nothing and puts focus on the field", () => {
+	const storage = fakeStorage()
+	const { model, view } = boot(storage)
+	createProfile(view, "   ")
+	assert.deepEqual(model.inputs.errors, { name: "profile.error.required" })
+	assert.deepEqual(model.data.profiles, [])
+	assert.equal(model.app.page, "profiles")
+	assert.deepEqual(storage.items, {})
+	assert.deepEqual(view.fields, ["profile-name"])
+	createProfile(view, "Malin") // a valid name clears the error
+	assert.deepEqual(model.inputs.errors, {})
+})
+
+test("the chosen profile is still selected after a reload", () => {
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin", "Rune"], 1) }))
+	assert.equal(model.app.page, "garage")
+	assert.equal(view.derived.profile.name, "Rune")
+})
+
+test("choosing a profile makes it active, saves it and opens the garage", () => {
+	const storage = fakeStorage({ [STORAGE_KEY]: dataWith(["Malin", "Rune"], null) })
+	const { model, view } = boot(storage)
+	assert.equal(model.app.page, "profiles")
+	view.handlers["choose-profile"](null, { dataset: { id: "p1" } })
+	assert.equal(model.data.activeProfileId, "p1")
+	assert.equal(storedData(storage).activeProfileId, "p1")
+	assert.equal(model.app.page, "garage")
+	assert.equal(view.headings, 1)
+})
+
+test("choosing an id that matches no profile changes nothing", () => {
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"], null) }))
+	view.handlers["choose-profile"](null, { dataset: { id: "gone" } })
+	assert.equal(model.data.activeProfileId, null)
+	assert.equal(model.app.page, "profiles")
+})
+
+test("Switch profile clears the active profile, saves that and opens the picker", () => {
+	const storage = fakeStorage({ [STORAGE_KEY]: dataWith(["Malin", "Rune"], 0) })
+	const { model, view } = boot(storage)
+	const before = view.headerRenders
+	view.handlers["switch-profile"]()
+	assert.equal(model.data.activeProfileId, null)
+	assert.equal(storedData(storage).activeProfileId, null)
+	assert.equal(model.app.page, "profiles")
+	assert.equal(view.derived.profile, null)
+	assert.equal(view.headerRenders, before + 1) // the header drops the name and the button
+	assert.equal(view.headings, 1)
+})
+
+test("leaving the profiles page clears a half-typed name and its error", () => {
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"], null) }))
+	createProfile(view, "malin") // taken
+	assert.deepEqual(model.inputs.errors, { name: "profile.error.taken" })
+	view.handlers["choose-profile"](null, { dataset: { id: "p0" } })
+	assert.equal(model.inputs.profile.name, "")
+	assert.deepEqual(model.inputs.errors, {})
+})
+
+test("when setItem throws a new profile still works for the open page", () => {
+	const { model, view } = boot(fakeStorage({}, { throwOnSet: true }))
+	assert.doesNotThrow(() => createProfile(view, "Malin"))
+	assert.equal(model.app.page, "garage")
+	assert.equal(view.derived.profile.name, "Malin")
 })

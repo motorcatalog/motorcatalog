@@ -13,4 +13,6 @@ export const config = Object.freeze({
 	baseCurrency: "NOK",
 	regions: { NO: "NOK" },
 	flags: { NOK: "no" },
+	// A profile name is trimmed and at most this many characters.
+	profileNameMax: 40,
 })
