@@ -232,6 +232,26 @@ test("another tab clearing the theme key falls back to the system theme", () => 
 	assert.equal(view.derived.theme, "dark")
 })
 
+test("the System row uses the OS theme of now, even if the OS changed while a theme was chosen", () => {
+	const scheme = fakeColorScheme()
+	const { view } = boot(fakeStorage())
+	view.handlers["set-theme"](null, { dataset: { value: "dark" } })
+	scheme.flip(true) // not reported: a theme is chosen
+	view.handlers["set-theme"](null, { dataset: { value: "" } })
+	assert.equal(view.derived.theme, "light")
+	assert.equal(globalThis.document.documentElement.dataset.theme, "light")
+})
+
+test("another tab clearing the theme key uses the OS theme of now, even if the OS changed meanwhile", () => {
+	const scheme = fakeColorScheme()
+	const storage = fakeStorage({ theme: "dark" })
+	const { view } = boot(storage)
+	scheme.flip(true) // not reported: a theme is stored
+	delete storage.items.theme
+	storageEvent("theme")
+	assert.equal(view.derived.theme, "light")
+})
+
 test("resolvePreferences uses the choice, and the system value where nothing is chosen", () => {
 	const derived = resolvePreferences({
 		chosen: { lang: "en", theme: null, currency: null },

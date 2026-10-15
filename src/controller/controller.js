@@ -97,14 +97,17 @@ export function createController({ model, view, i18n, config, languages }) {
 	// current choice changes nothing, so nothing is redrawn.
 	function setPreference(name, value) {
 		const next = value === "" || value === undefined ? null : value
-		const { chosen } = model.app.preferences
+		const { chosen, system } = model.app.preferences
 		if (next === chosen[name]) return
 		chosen[name] = next
+		// The OS theme is only watched while no theme is chosen, so it is
+		// read again here in case it changed in the meantime.
+		if (name === "theme") system.theme = systemTheme()
 		render()
 	}
 
-	// The live system value changed (the OS switched theme). It only shows
-	// while nothing is chosen, but the System row names it either way.
+	// The live system value changed (the OS switched theme). The OS is only
+	// watched while no theme is chosen; setPreference catches up on the rest.
 	function setSystem(name, value) {
 		const { system } = model.app.preferences
 		if (value === system[name]) return
