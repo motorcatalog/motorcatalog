@@ -109,16 +109,43 @@ export function createView({ header, main }, i18n, config) {
 			</form>`
 	}
 
-	// derived.cars is the active profile's cars. The list of cards comes
-	// with #9; until then the garage says when it is empty.
+	// derived.cars is the active profile's cars, one card each, in the
+	// order they were added. With none, a short line says so.
 	function garagePage(_model, derived, t) {
-		const empty = derived.cars.length === 0
+		const { cars } = derived
+		const km = new Intl.NumberFormat(derived.lang)
 		return `
-			<h1 tabindex="-1">${esc(t("garage.title"))}</h1>
-			${empty ? `<p class="text-muted-foreground">${esc(t("garage.empty"))}</p>` : ""}
-			<div>
+			<div class="cluster-between">
+				<h1 tabindex="-1">${esc(t("garage.title"))}</h1>
 				<button class="btn btn-primary" type="button" data-action="add-car">${icon("plus")}<span>${esc(t("garage.addCar"))}</span></button>
-			</div>`
+			</div>
+			${
+				cars.length === 0
+					? `<p class="garage-empty text-muted-foreground">${esc(t("garage.empty"))}</p>`
+					: `<ul class="car-list" role="list">${cars.map((car) => carCard(car, t, km)).join("")}</ul>`
+			}`
+	}
+
+	// One car. The title is the card's only link, and main.css stretches it
+	// over the whole card, so a screen reader hears the car's name and not
+	// every line of the card. A nickname takes the title, and make and model
+	// move to the line under it. The VIN shows only when there is one, on
+	// its own row under the registration number and the odometer.
+	function carCard(car, t, km) {
+		const makeModel = `${car.make} ${car.model}`
+		const fact = (label, value, cls = "") =>
+			`<div${cls && ` class="${cls}"`}><dt>${esc(t(label))}</dt><dd>${esc(value)}</dd></div>`
+		return `
+			<li class="card card-hover car-card">
+				<h2 class="car-card-title"><a href="#car-${esc(car.id)}" data-action="open-car" data-id="${esc(car.id)}">${esc(car.nickname ?? makeModel)}</a></h2>
+				${car.nickname ? `<p class="car-card-make">${esc(makeModel)}</p>` : ""}
+				<p class="car-card-meta">${esc(t("garage.yearFuel", { year: car.year, fuel: t(`fuel.${car.fuel}`) }))}</p>
+				<dl class="car-card-facts">
+					${fact("garage.regNumber", car.regNumber)}
+					${fact("garage.mileage", t("garage.km", { km: km.format(car.mileage) }))}
+					${car.vin ? fact("garage.vin", car.vin, "car-card-vin") : ""}
+				</dl>
+			</li>`
 	}
 
 	// The car form's fields in form order (docs/design/data-model.md, Car).

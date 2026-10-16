@@ -59,7 +59,27 @@ for (const name of ["lang", "theme", "currency"]) {
 	})
 }
 
-// Every page the profile and add car stories add, with the header row for the active
+// Two cars as the car form saves them: one plain, one with a nickname and a VIN.
+const CAR = {
+	profileId: "p0",
+	nickname: null,
+	make: "Volvo",
+	model: "V70",
+	year: 2008,
+	regCountry: "NO",
+	regNumber: "AB12345",
+	vin: null,
+	fuel: "diesel",
+	engine: null,
+	mileage: 184000,
+	euInspectionDue: null,
+}
+const CARS = [
+	{ ...CAR, id: "c0" },
+	{ ...CAR, id: "c1", nickname: "Weekend car", vin: "YV1SW61R021234567" },
+]
+
+// Every page the profile, add car and garage stories add, with the header row for the active
 // profile where there is one.
 const PAGES = {
 	"the welcome page": { page: "profiles", profiles: [], active: null },
@@ -71,6 +91,7 @@ const PAGES = {
 		error: "profile.error.required",
 	},
 	"the garage with an active profile": { page: "garage", profiles: ["Malin"], active: 0 },
+	"the garage with cars": { page: "garage", profiles: ["Malin"], active: 0, cars: CARS },
 	"the car form": { page: "carForm", profiles: ["Malin"], active: 0 },
 	"the car form with errors": {
 		page: "carForm",
@@ -80,7 +101,7 @@ const PAGES = {
 	},
 }
 
-for (const [name, { page, profiles, active, error, errors }] of Object.entries(PAGES)) {
+for (const [name, { page, profiles, active, error, errors, cars = [] }] of Object.entries(PAGES)) {
 	test(`${name} has no axe violations`, async () => {
 		dom = createMount("en")
 		const view = createView({ header: dom.header, main: dom.mount }, i18n, MULTI_CURRENCY)
@@ -91,6 +112,7 @@ for (const [name, { page, profiles, active, error, errors }] of Object.entries(P
 		if (error) model.inputs.errors = { name: error }
 		if (errors) model.inputs.errors = errors
 		derived.profile = model.data.profiles[active] ?? null
+		derived.cars = cars
 		if (page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		view.renderHeader(model, derived)
 		view.render(model, derived)

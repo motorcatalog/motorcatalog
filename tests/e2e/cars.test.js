@@ -63,7 +63,7 @@ async function openForm(page) {
 
 test("a car added from the garage is saved to the profile and kept after a reload", async () => {
 	const page = await openGarage()
-	assert.equal(await page.$eval("#main h1 + p", (el) => el.textContent), en["garage.empty"])
+	assert.equal(await page.$eval("#main .garage-empty", (el) => el.textContent), en["garage.empty"])
 	await openForm(page)
 	assert.equal(await focusedId(page), "h1")
 	await page.type("#car-make", "Volvo")
@@ -82,7 +82,11 @@ test("a car added from the garage is saved to the profile and kept after a reloa
 	assert.equal(car.fuel, "diesel")
 	assert.equal(car.mileage, 184000)
 	assert.equal(car.vin, null)
-	assert.equal(await page.$("#main h1 + p"), null) // no longer empty
+	assert.equal(await page.$("#main .garage-empty"), null) // no longer empty
+	const card = (selector) =>
+		page.$eval(`#main .car-card ${selector}`, (el) => el.textContent.trim())
+	assert.equal(await card("h2 a"), "Volvo V70")
+	assert.equal(await card("dl > div:last-child dd"), "184,000 km")
 
 	await page.reload({ waitUntil: "networkidle0" })
 	assert.equal((await savedCars(page)).length, 1)
