@@ -15,4 +15,9 @@ export const config = Object.freeze({
 	flags: { NOK: "no" },
 	// A profile name is trimmed and at most this many characters.
 	profileNameMax: 40,
+	// The car form (docs/design/data-model.md, Car). The last allowed year
+	// is next year, worked out when the form is saved.
+	fuels: ["petrol", "diesel", "electric", "hybrid", "other"],
+	carNicknameMax: 40,
+	carYearMin: 1900,
 })
