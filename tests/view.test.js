@@ -24,6 +24,8 @@ afterEach(() => dom?.window.close())
 // What the controller hands the view: a clone of the model with these
 // choices and system values, and the derived values worked out from them.
 // `profiles` are names (ids p0, p1, ...), `active` the index of the active one.
+// `cars` are saved cars, `car` what is typed into the car form and
+// `carErrors` its errors.
 function screen({
 	chosen = {},
 	system = {},
@@ -32,6 +34,9 @@ function screen({
 	active = null,
 	name = "",
 	error = null,
+	cars = [],
+	car = {},
+	carErrors = null,
 } = {}) {
 	const model = structuredClone(initialModel)
 	Object.assign(model.app.preferences.chosen, chosen)
@@ -45,8 +50,15 @@ function screen({
 	model.data.activeProfileId = active === null ? null : `p${active}`
 	model.inputs.profile.name = name
 	if (error) model.inputs.errors = { name: error }
+	if (carErrors) model.inputs.errors = carErrors
+	Object.assign(model.inputs.car, car)
+	model.data.cars = cars
 	const profile = model.data.profiles.find((p) => p.id === model.data.activeProfileId) ?? null
-	return { model, derived: { ...resolvePreferences(model.app.preferences), profile } }
+	const profileCars = cars.filter((c) => c.profileId === model.data.activeProfileId)
+	return {
+		model,
+		derived: { ...resolvePreferences(model.app.preferences), profile, cars: profileCars },
+	}
 }
 
 // `offer` is the config the view is built with: three currencies by
@@ -251,13 +263,82 @@ test("a profile name with markup is rendered as text, not as HTML", () => {
 	assert.equal(text(header.querySelector(".header-profile-name")), "<b>x</b>")
 })
 
-test("the garage has its heading and an empty line until cars arrive", () => {
+test("the garage has its heading, Add car and an empty line until the profile has a car", () => {
 	const { main } = mount(screen({ ...en, page: "garage", profiles: ["Malin"], active: 0 }))
 	const h1 = main.querySelector("h1")
 	assert.equal(text(h1), bundles.en["garage.title"])
 	assert.equal(h1.getAttribute("tabindex"), "-1")
 	assert.equal(text(main.querySelector("h1 + p")), bundles.en["garage.empty"])
+	assert.equal(text(main.querySelector("[data-action='add-car']")), bundles.en["garage.addCar"])
 	assert.equal(main.querySelector("form"), null)
+
+	const someoneElses = [{ id: "c0", profileId: "p1", make: "Saab" }]
+	const other = mount(
+		screen({ ...en, page: "garage", profiles: ["Malin", "Rune"], active: 0, cars: someoneElses })
+	)
+	assert.equal(text(other.main.querySelector("h1 + p")), bundles.en["garage.empty"])
+	const own = mount(
+		screen({
+			...en,
+			page: "garage",
+			profiles: ["Malin"],
+			active: 0,
+			cars: [{ id: "c0", profileId: "p0" }],
+		})
+	)
+	assert.equal(own.main.querySelector("h1 + p"), null)
+})
+
+test("the car form has a label per field, marks the required ones and lists the fuels", () => {
+	const { main } = mount(screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0 }))
+	assert.equal(text(main.querySelector("h1")), bundles.en["carForm.title"])
+	const fields = [...main.querySelectorAll("[data-input='car-input']")]
+	assert.deepEqual(
+		fields.map((el) => el.dataset.field),
+		["nickname", "make", "model", "year", "regNumber", "vin", "fuel", "engine", "mileage"]
+	)
+	for (const el of fields) {
+		assert.equal(
+			text(main.querySelector(`label[for="${el.id}"]`)),
+			bundles.en[`car.${el.dataset.field}`]
+		)
+	}
+	const required = fields.filter((el) => el.required).map((el) => el.dataset.field)
+	assert.deepEqual(required, ["make", "model", "year", "regNumber", "mileage"])
+	const fuels = [...main.querySelectorAll("#car-fuel option")].map((o) => o.value)
+	assert.deepEqual(fuels, config.fuels)
+	assert.equal(main.querySelector("#car-fuel").value, "petrol")
+	assert.equal(main.querySelector("#car-year").type, "number")
+	assert.equal(main.querySelector("form button[type='submit']").textContent, bundles.en["car.save"])
+	assert.equal(text(main.querySelector("[data-action='cancel-car']")), bundles.en["car.cancel"])
+})
+
+test("the car form keeps what was typed and shows each error under its field", () => {
+	const { main } = mount(
+		screen({
+			...en,
+			page: "carForm",
+			profiles: ["Malin"],
+			active: 0,
+			car: { model: "V70", fuel: "diesel", nickname: "<b>x</b>" },
+			carErrors: { make: "car.error.make", nickname: "car.error.nickname" },
+		})
+	)
+	assert.equal(main.querySelector("#car-model").value, "V70")
+	assert.equal(main.querySelector("#car-fuel").value, "diesel")
+	assert.equal(main.querySelector("#car-nickname").value, "<b>x</b>")
+	assert.equal(main.querySelector("b"), null)
+	const make = main.querySelector("#car-make")
+	assert.equal(make.getAttribute("aria-invalid"), "true")
+	assert.equal(
+		text(main.querySelector(`#${make.getAttribute("aria-describedby")}`)),
+		bundles.en["car.error.make"]
+	)
+	assert.equal(
+		text(main.querySelector("#car-nickname-error")),
+		bundles.en["car.error.nickname"].replace("{max}", "40")
+	)
+	assert.equal(main.querySelector("#car-model").hasAttribute("aria-invalid"), false)
 })
 
 test("the header shows the active profile and Switch profile, and neither without one", () => {
