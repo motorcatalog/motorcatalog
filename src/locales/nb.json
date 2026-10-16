@@ -45,12 +45,12 @@
 	"car.error.vin": "Et understellsnummer har 17 bokstaver og tall, uten I, O og Q.",
 	"car.error.fuel": "Velg drivstoff.",
 	"car.error.mileage": "Skriv inn kilometerstanden i hele km, fra 0 til {maxKm}.",
-	"car.hint.nickname": "For eksempel Helgebilen",
-	"car.hint.make": "For eksempel Mercedes-Benz",
-	"car.hint.model": "For eksempel C63 AMG",
-	"car.hint.year": "For eksempel 2015",
-	"car.hint.regNumber": "For eksempel AB 12345",
-	"car.hint.vin": "For eksempel WDD2050871F123456",
-	"car.hint.engine": "For eksempel 4.0 V8",
-	"car.hint.mileage": "For eksempel 85000"
+	"car.placeholder.nickname": "f.eks. Helgebilen",
+	"car.placeholder.make": "f.eks. Mercedes-Benz",
+	"car.placeholder.model": "f.eks. C63 AMG",
+	"car.placeholder.year": "f.eks. 2015",
+	"car.placeholder.regNumber": "f.eks. AB 12345",
+	"car.placeholder.vin": "f.eks. WDD2050871F123456",
+	"car.placeholder.engine": "f.eks. 4.0 V8",
+	"car.placeholder.mileage": "f.eks. 85000"
 }

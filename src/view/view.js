@@ -121,7 +121,8 @@ export function createView({ header, main }, i18n, config) {
 	// ones carry the required attribute. Year and odometer are text with a
 	// number keyboard: type="number" lets "e", "+", "-" and "." through, and
 	// the controller keeps them to digits as they are typed. Every field but
-	// fuel has an example under its label (car.hint.*).
+	// fuel shows a short example until something is typed (car.placeholder.*).
+	// The label stays above it, so the field is still named once it is filled.
 	const CAR_FIELDS = [
 		{ name: "nickname", attrs: `maxlength="${config.carNicknameMax}"` },
 		{ name: "make", required: true, attrs: 'list="car-makes"' },
@@ -129,7 +130,7 @@ export function createView({ header, main }, i18n, config) {
 		{ name: "year", required: true, attrs: 'inputmode="numeric"' },
 		{ name: "regNumber", required: true, attrs: 'autocapitalize="characters" spellcheck="false"' },
 		{ name: "vin", attrs: 'maxlength="17" autocapitalize="characters" spellcheck="false"' },
-		{ name: "fuel", type: "select", hint: false },
+		{ name: "fuel", type: "select" },
 		{ name: "engine" },
 		{ name: "mileage", required: true, attrs: 'inputmode="numeric"' },
 	]
@@ -151,24 +152,15 @@ export function createView({ header, main }, i18n, config) {
 
 	// One labelled field. Every keystroke goes to the controller as
 	// "car-input" with the field's name, so the form needs no redraw.
-	// The error is read before the hint, since it is what needs fixing.
-	function carField(
-		model,
-		derived,
-		t,
-		{ name, type = "text", required = false, hint = true, attrs = "" }
-	) {
+	function carField(model, derived, t, { name, type = "text", required = false, attrs = "" }) {
 		const id = `car-${name}`
 		const value = model.inputs.car[name]
 		const error = model.inputs.errors[name]
 		const errorId = `${id}-error`
-		const hintId = `${id}-hint`
-		const describedBy = [error ? errorId : "", hint ? hintId : ""].filter(Boolean).join(" ")
 		const shared = [
 			`id="${id}" name="${name}" data-input="car-input" data-field="${name}"`,
 			required ? "required" : "",
-			error ? 'aria-invalid="true"' : "",
-			describedBy ? `aria-describedby="${describedBy}"` : "",
+			error ? `aria-invalid="true" aria-describedby="${errorId}"` : "",
 			attrs,
 		].join(" ")
 		const control =
@@ -179,7 +171,8 @@ export function createView({ header, main }, i18n, config) {
 								`<option value="${esc(fuel)}"${fuel === value ? " selected" : ""}>${esc(t(`fuel.${fuel}`))}</option>`
 						)
 						.join("")}</select>`
-				: `<input class="input" type="${type}" autocomplete="off" ${shared} value="${esc(value)}" />`
+				: `<input class="input" type="${type}" autocomplete="off" ${shared} value="${esc(value)}"
+						placeholder="${esc(t(`car.placeholder.${name}`))}" />`
 		const vars = {
 			max: config.carNicknameMax,
 			min: config.carYearMin,
@@ -188,7 +181,6 @@ export function createView({ header, main }, i18n, config) {
 		return `
 			<div class="field">
 				<label class="label" for="${id}">${esc(t(`car.${name}`))}</label>
-				${hint ? `<p class="help" id="${hintId}">${esc(t(`car.hint.${name}`))}</p>` : ""}
 				${control}
 				${error ? `<p class="field-error" id="${errorId}">${esc(t(error, vars))}</p>` : ""}
 			</div>`

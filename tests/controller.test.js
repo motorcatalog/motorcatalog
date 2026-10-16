@@ -400,6 +400,13 @@ test("typing into the name field updates the input without a redraw", () => {
 	assert.equal(view.renders, 1)
 })
 
+test("a profile name gets a capital first letter as it is typed", () => {
+	const { model, view } = boot(fakeStorage())
+	view.handlers["profile-name"](null, { value: "malin", selectionStart: 5 })
+	assert.equal(model.inputs.profile.name, "Malin")
+	assert.deepEqual(view.corrected, [{ value: "Malin", caret: 5 }])
+})
+
 test("an empty name shows an error, saves nothing and puts focus on the field", () => {
 	const storage = fakeStorage()
 	const { model, view } = boot(storage)

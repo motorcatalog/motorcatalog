@@ -86,12 +86,12 @@ const VIN = /^[A-HJ-NPR-Z0-9]{17}$/
 // What a car field holds while it is typed, so the user sees the rule at
 // once. Make and model are left alone: names like "e-tron" and "iX" start
 // in lower case. Spaces in the registration number go when it is saved.
-const CAPITAL_FIRST = (value) => value.replace(/^\s*\p{L}/u, (start) => start.toLocaleUpperCase())
+const capitalFirst = (value) => value.replace(/^\s*\p{L}/u, (start) => start.toLocaleUpperCase())
 const CAPITALS = (value) => value.toLocaleUpperCase()
 const DIGITS = (max) => (value) => value.replace(/\D/g, "").slice(0, max)
 const TYPED_RULES = {
-	nickname: CAPITAL_FIRST,
-	engine: CAPITAL_FIRST,
+	nickname: capitalFirst,
+	engine: capitalFirst,
 	regNumber: CAPITALS,
 	vin: CAPITALS,
 	year: DIGITS(4),
@@ -192,7 +192,7 @@ export function createController({ model, view, i18n, config, languages }) {
 			"set-theme": (_event, target) => choose("theme", target.dataset.value),
 			"set-currency": (_event, target) => choose("currency", target.dataset.currency),
 			"profile-name": (_event, target) => {
-				model.inputs.profile.name = target.value // no redraw while typing
+				model.inputs.profile.name = fixTyped(target, capitalFirst) // no redraw while typing
 			},
 			"create-profile": createProfile,
 			"choose-profile": (_event, target) => chooseProfile(target.dataset.id),
@@ -201,20 +201,10 @@ export function createController({ model, view, i18n, config, languages }) {
 				clearInputs()
 				go("carForm")
 			},
-			// A character the field can't hold is fixed in place. The caret
-			// stays after the same typed text, so a key pressed mid-field
-			// doesn't throw it to the end.
 			"car-input": (_event, target) => {
 				const { field } = target.dataset
 				if (!Object.hasOwn(model.inputs.car, field)) return
-				const value = typedCarInput(field, target.value)
-				model.inputs.car[field] = value
-				if (value === target.value) return
-				const caret = typedCarInput(
-					field,
-					target.value.slice(0, target.selectionStart ?? undefined)
-				).length
-				view.setFieldValue(target, value, caret)
+				model.inputs.car[field] = fixTyped(target, (value) => typedCarInput(field, value))
 			},
 			"save-car": saveCar,
 			"cancel-car": () => {
@@ -284,6 +274,18 @@ export function createController({ model, view, i18n, config, languages }) {
 		saveData(model.data)
 		clearInputs()
 		go(id ? "garage" : "profiles")
+	}
+
+	// What a field holds after `rule`. A character the field can't hold is
+	// fixed in place, and the caret stays after the same typed text, so a
+	// key pressed mid-field doesn't throw it to the end.
+	function fixTyped(target, rule) {
+		const value = rule(target.value)
+		if (value !== target.value) {
+			const caret = rule(target.value.slice(0, target.selectionStart ?? undefined)).length
+			view.setFieldValue(target, value, caret)
+		}
+		return value
 	}
 
 	function clearInputs() {

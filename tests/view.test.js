@@ -337,7 +337,7 @@ test("the car form keeps what was typed and shows each error under its field", (
 	assert.equal(main.querySelector("b"), null)
 	const make = main.querySelector("#car-make")
 	assert.equal(make.getAttribute("aria-invalid"), "true")
-	assert.equal(make.getAttribute("aria-describedby"), "car-make-error car-make-hint")
+	assert.equal(make.getAttribute("aria-describedby"), "car-make-error")
 	assert.equal(text(main.querySelector("#car-make-error")), bundles.en["car.error.make"])
 	assert.equal(
 		text(main.querySelector("#car-nickname-error")),
@@ -350,21 +350,16 @@ test("the car form keeps what was typed and shows each error under its field", (
 	assert.equal(main.querySelector("#car-model").hasAttribute("aria-invalid"), false)
 })
 
-test("every car field but fuel has an example under its label, read with the field", () => {
+test("every car field but fuel shows a short example inside it until something is typed", () => {
 	const { main } = mount(screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0 }))
-	const fields = [...main.querySelectorAll("[data-input='car-input']")]
-	for (const el of fields) {
+	for (const el of main.querySelectorAll("input[data-input='car-input']")) {
 		const { field } = el.dataset
-		const hint = main.querySelector(`#car-${field}-hint`)
-		if (field === "fuel") {
-			assert.equal(hint, null)
-			continue
-		}
-		assert.equal(text(hint), bundles.en[`car.hint.${field}`], field)
-		assert.equal(el.getAttribute("aria-describedby"), `car-${field}-hint`, field)
+		assert.equal(el.placeholder, bundles.en[`car.placeholder.${field}`], field)
+		assert.match(el.placeholder, /^e\.g\. /, field)
 	}
-	assert.match(text(main.querySelector("#car-make-hint")), /Mercedes-Benz/)
-	assert.match(text(main.querySelector("#car-model-hint")), /C63 AMG/)
+	assert.equal(main.querySelector("#car-make").placeholder, "e.g. Mercedes-Benz")
+	assert.equal(main.querySelector("#car-model").placeholder, "e.g. C63 AMG")
+	assert.equal(main.querySelector(".help"), null)
 })
 
 test("make suggests the built-in list of makes", () => {
