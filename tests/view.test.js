@@ -10,7 +10,9 @@ import { afterEach, test } from "node:test"
 import { JSDOM } from "jsdom"
 import { createTranslator } from "../i18n/index.js"
 import { config } from "../src/config.js"
-import { resolvePreferences } from "../src/controller/controller.js"
+import { carFormHints, resolvePreferences } from "../src/controller/controller.js"
+import { MAKES } from "../src/data/models.js"
+import { PLATES } from "../src/data/plates.js"
 import { bundles, FALLBACK_LANG } from "../src/locales/index.js"
 import { model as initialModel } from "../src/model/model.js"
 import { createView, escapeHtml } from "../src/view/view.js"
@@ -57,8 +59,18 @@ function screen({
 	const profileCars = cars.filter((c) => c.profileId === model.data.activeProfileId)
 	return {
 		model,
-		derived: { ...resolvePreferences(model.app.preferences), profile, cars: profileCars },
+		derived: carFormDerived(model, {
+			...resolvePreferences(model.app.preferences),
+			profile,
+			cars: profileCars,
+		}),
 	}
+}
+
+// The controller adds the car form's hints while that page is open.
+function carFormDerived(model, derived) {
+	if (model.app.page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
+	return derived
 }
 
 // `offer` is the config the view is built with: three currencies by
@@ -295,7 +307,18 @@ test("the car form has a label per field, marks the required ones and lists the 
 	const fields = [...main.querySelectorAll("[data-input='car-input']")]
 	assert.deepEqual(
 		fields.map((el) => el.dataset.field),
-		["nickname", "make", "model", "year", "regNumber", "vin", "fuel", "engine", "mileage"]
+		[
+			"nickname",
+			"make",
+			"model",
+			"year",
+			"regCountry",
+			"regNumber",
+			"vin",
+			"fuel",
+			"engine",
+			"mileage",
+		]
 	)
 	for (const el of fields) {
 		assert.equal(
@@ -304,7 +327,7 @@ test("the car form has a label per field, marks the required ones and lists the 
 		)
 	}
 	const required = fields.filter((el) => el.required).map((el) => el.dataset.field)
-	assert.deepEqual(required, ["make", "model", "year", "regNumber", "mileage"])
+	assert.deepEqual(required, ["make", "model", "year", "regCountry", "regNumber", "mileage"])
 	const fuels = [...main.querySelectorAll("#car-fuel option")].map((o) => o.value)
 	assert.deepEqual(fuels, config.fuels)
 	assert.equal(main.querySelector("#car-fuel").value, "petrol")
@@ -337,7 +360,7 @@ test("the car form keeps what was typed and shows each error under its field", (
 	assert.equal(main.querySelector("b"), null)
 	const make = main.querySelector("#car-make")
 	assert.equal(make.getAttribute("aria-invalid"), "true")
-	assert.equal(make.getAttribute("aria-describedby"), "car-make-error car-make-hint")
+	assert.equal(make.getAttribute("aria-describedby"), "car-make-error")
 	assert.equal(text(main.querySelector("#car-make-error")), bundles.en["car.error.make"])
 	assert.equal(
 		text(main.querySelector("#car-nickname-error")),
@@ -350,21 +373,18 @@ test("the car form keeps what was typed and shows each error under its field", (
 	assert.equal(main.querySelector("#car-model").hasAttribute("aria-invalid"), false)
 })
 
-test("every car field but fuel has an example under its label, read with the field", () => {
+test("every car field but fuel shows a short example inside it until something is typed", () => {
 	const { main } = mount(screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0 }))
-	const fields = [...main.querySelectorAll("[data-input='car-input']")]
-	for (const el of fields) {
+	for (const el of main.querySelectorAll("input[data-input='car-input']")) {
 		const { field } = el.dataset
-		const hint = main.querySelector(`#car-${field}-hint`)
-		if (field === "fuel") {
-			assert.equal(hint, null)
-			continue
-		}
-		assert.equal(text(hint), bundles.en[`car.hint.${field}`], field)
-		assert.equal(el.getAttribute("aria-describedby"), `car-${field}-hint`, field)
+		if (field !== "regNumber")
+			assert.equal(el.placeholder, bundles.en[`car.placeholder.${field}`], field)
+		assert.match(el.placeholder, /^e\.g\. /, field)
 	}
-	assert.match(text(main.querySelector("#car-make-hint")), /Mercedes-Benz/)
-	assert.match(text(main.querySelector("#car-model-hint")), /C63 AMG/)
+	assert.equal(main.querySelector("#car-regNumber").placeholder, `e.g. ${PLATES.NO.example}`)
+	assert.equal(main.querySelector("#car-make").placeholder, "e.g. Mercedes-Benz")
+	assert.equal(main.querySelector("#car-model").placeholder, "e.g. C63 AMG")
+	assert.equal(main.querySelector(".help"), null)
 })
 
 test("make suggests the built-in list of makes", () => {
@@ -373,9 +393,51 @@ test("make suggests the built-in list of makes", () => {
 		`datalist#${main.querySelector("#car-make").getAttribute("list")}`
 	)
 	const makes = [...list.querySelectorAll("option")].map((o) => o.value)
-	assert.deepEqual(makes, config.carMakes)
+	assert.deepEqual(makes, MAKES)
 	assert.ok(makes.includes("Mercedes-Benz"))
-	assert.equal(main.querySelector("#car-model").hasAttribute("list"), false)
+})
+
+// The values in a field's <datalist>.
+const suggestions = (main, id) =>
+	[...main.querySelector(`datalist#${main.querySelector(id).getAttribute("list")}`).options].map(
+		(o) => o.value
+	)
+
+test("model suggests the models of the typed make, and none before a make is known", () => {
+	const form = { ...en, page: "carForm", profiles: ["Malin"], active: 0 }
+	assert.deepEqual(suggestions(mount(screen(form)).main, "#car-model"), [])
+	const { main } = mount(screen({ ...form, car: { make: "mercedes-benz" } }))
+	assert.ok(suggestions(main, "#car-model").includes("C63 AMG"))
+})
+
+test("the country field starts on Norway, by name, and suggests every country with a plate rule", () => {
+	const { main } = mount(screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0 }))
+	assert.equal(main.querySelector("#car-regCountry").value, "Norway")
+	const countries = suggestions(main, "#car-regCountry")
+	assert.equal(countries.length, Object.keys(PLATES).length)
+	assert.ok(countries.includes("Sweden"))
+	const typed = mount(
+		screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0, car: { regCountry: "Nor" } })
+	)
+	assert.equal(typed.main.querySelector("#car-regCountry").value, "Nor")
+	assert.equal(typed.main.querySelector("#car-regNumber").placeholder, "")
+})
+
+test("a plate that doesn't fit its country says the country and the lengths", () => {
+	const { main } = mount(
+		screen({
+			...en,
+			page: "carForm",
+			profiles: ["Malin"],
+			active: 0,
+			carErrors: { regNumber: "car.error.regNumberLength" },
+		})
+	)
+	const { min, max } = PLATES.NO
+	assert.equal(
+		text(main.querySelector("#car-regNumber-error")),
+		`A registration number from Norway has ${min} to ${max} letters and digits.`
+	)
 })
 
 test("the header shows the active profile and Switch profile, and neither without one", () => {

@@ -138,5 +138,17 @@ test("fields fix what is typed in place and keep the caret", async () => {
 	await page.keyboard.type("x")
 	assert.equal(await value("#car-year"), "2015")
 	assert.equal(await page.$eval("#car-year", (el) => el.selectionStart), 1)
+
+	// A new make and country change the model suggestions and plate example.
+	const placeholder = () => page.$eval("#car-regNumber", (el) => el.placeholder)
+	const norway = await placeholder()
+	await page.click("#car-regCountry", { count: 3 })
+	await page.keyboard.type("Sweden")
+	assert.notEqual(await placeholder(), norway)
+	assert.match(await placeholder(), /^e\.g\. /)
+	await page.click("#car-make", { count: 3 })
+	await page.keyboard.type("Mercedes-Benz")
+	const models = await page.$$eval("#car-models option", (os) => os.map((o) => o.value))
+	assert.ok(models.includes("C63 AMG"))
 	await page.browserContext().close()
 })

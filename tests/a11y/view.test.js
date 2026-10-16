@@ -13,7 +13,7 @@
 import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
 import { createTranslator } from "../../i18n/index.js"
-import { resolvePreferences } from "../../src/controller/controller.js"
+import { carFormHints, resolvePreferences } from "../../src/controller/controller.js"
 import { bundles, FALLBACK_LANG } from "../../src/locales/index.js"
 import { model as initialModel } from "../../src/model/model.js"
 import { createView } from "../../src/view/view.js"
@@ -91,6 +91,7 @@ for (const [name, { page, profiles, active, error, errors }] of Object.entries(P
 		if (error) model.inputs.errors = { name: error }
 		if (errors) model.inputs.errors = errors
 		derived.profile = model.data.profiles[active] ?? null
+		if (page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		view.renderHeader(model, derived)
 		view.render(model, derived)
 		assert.ok(dom.mount.querySelector("h1"))

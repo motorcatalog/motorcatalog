@@ -39,6 +39,7 @@ erDiagram
     string make
     string model
     number year
+    string regCountry
     string regNumber
     string vin "optional"
     string fuel
@@ -89,7 +90,8 @@ A local profile that keeps one person's cars apart from another's on a shared de
 | `make` | string | Required, e.g. "Mercedes-Benz". Kept as typed. The form suggests a list of makes, but any make can be typed |
 | `model` | string | Required, e.g. "C63 AMG". Kept as typed, so "e-tron" and "iX" stay right |
 | `year` | number | 1900 to next year |
-| `regNumber` | string | Required. Saved in capitals without spaces ("ab 12345" becomes "AB12345") |
+| `regCountry` | string | Required. The country the plate is from, as an ISO 3166 code like "NO". The form starts on Norway and suggests every country with a plate rule (`src/data/plates.js`) |
+| `regNumber` | string | Required. Saved in capitals without spaces or hyphens ("ab 12345" becomes "AB12345"). Its letters, digits and length follow the plate rule of `regCountry` |
 | `vin` | string or null | Optional. 17 characters, saved in capitals, letters and digits only, never I, O or Q. Shown beside the registration number when it is set |
 | `fuel` | string | One of `petrol`, `diesel`, `electric`, `hybrid`, `other` |
 | `engine` | string or null | Optional free text, first letter in capitals, e.g. "4.0 V8" |
@@ -145,7 +147,7 @@ export const model = {
   inputs: {
     profile: { name: "" },
     car: {
-      nickname: "", make: "", model: "", year: "", regNumber: "", vin: "",
+      nickname: "", make: "", model: "", year: "", regCountry: "NO", regNumber: "", vin: "",
       fuel: "petrol", engine: "", mileage: "", euInspectionDue: "",
     },
     serviceEntry: {
@@ -197,10 +199,12 @@ The controller fixes each car field as it is typed, so the user sees the rule at
 | Field | While typing |
 |---|---|
 | `nickname`, `engine` | First letter in capitals |
-| `regNumber`, `vin` | Capitals |
+| `regNumber` | Capitals. Only the characters and length the country's plates use. Spaces and hyphens are kept but don't count |
+| `vin` | Capitals |
 | `year` | Digits only, at most 4 |
 | `mileage` | Digits only, at most 8 |
-| `make`, `model` | Kept as typed |
+| `make`, `model` | Kept as typed. Make suggests the makes in `src/data/models.js`, and model suggests the models of the typed make |
+| `regCountry` | A typed country name in the chosen language or English becomes its code |
 
 ### Mileage
 

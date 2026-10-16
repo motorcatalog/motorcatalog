@@ -28,6 +28,8 @@ import {
 	watchSystemTheme,
 	writePreference,
 } from "../../design-system/theme/preferences.js"
+import { MODELS } from "../data/models.js"
+import { PLATES } from "../data/plates.js"
 
 export const PREFERENCES = Object.freeze(["lang", "theme", "currency"])
 
@@ -86,20 +88,97 @@ const VIN = /^[A-HJ-NPR-Z0-9]{17}$/
 // What a car field holds while it is typed, so the user sees the rule at
 // once. Make and model are left alone: names like "e-tron" and "iX" start
 // in lower case. Spaces in the registration number go when it is saved.
-const CAPITAL_FIRST = (value) => value.replace(/^\s*\p{L}/u, (start) => start.toLocaleUpperCase())
+const capitalFirst = (value) => value.replace(/^\s*\p{L}/u, (start) => start.toLocaleUpperCase())
 const CAPITALS = (value) => value.toLocaleUpperCase()
 const DIGITS = (max) => (value) => value.replace(/\D/g, "").slice(0, max)
 const TYPED_RULES = {
-	nickname: CAPITAL_FIRST,
-	engine: CAPITAL_FIRST,
-	regNumber: CAPITALS,
+	nickname: capitalFirst,
+	engine: capitalFirst,
 	vin: CAPITALS,
 	year: DIGITS(4),
 	mileage: DIGITS(8), // 10 000 000 has eight digits
 }
 
-export function typedCarInput(field, value) {
+// `regCountry` is the country code the registration number follows.
+export function typedCarInput(field, value, regCountry = null) {
+	if (field === "regNumber") return typedRegNumber(value, regCountry)
 	return TYPED_RULES[field]?.(value) ?? value
+}
+
+// Spaces and hyphens only set a plate's parts apart, so they are kept
+// while typing, never counted and dropped on save.
+const PLATE_SEPARATOR = /[\s-]/
+const plateChar = (rule) => new RegExp(`^[A-Z0-9${rule.letters}]$`, "u")
+
+// A registration number in capitals. With a known country, only the
+// characters its plates use are kept, up to its longest plate.
+function typedRegNumber(value, regCountry) {
+	const upper = value.toLocaleUpperCase()
+	const rule = PLATES[regCountry]
+	if (!rule) return upper
+	const allowed = plateChar(rule)
+	let count = 0
+	let out = ""
+	for (const char of upper) {
+		if (PLATE_SEPARATOR.test(char)) out += char
+		else if (allowed.test(char) && count < rule.max) {
+			out += char
+			count++
+		}
+	}
+	return out
+}
+
+// Whether a registration number, without separators, is as long as the
+// country's plates and uses only their characters. No rule, no check.
+function plateFits(regNumber, rule) {
+	if (!rule) return true
+	const chars = [...regNumber]
+	const allowed = plateChar(rule)
+	return chars.length >= rule.min && chars.length <= rule.max && chars.every((c) => allowed.test(c))
+}
+
+// The countries with a plate rule, named in `lang` and sorted the way
+// that language sorts.
+export function countryList(lang) {
+	const names = new Intl.DisplayNames([lang], { type: "region" })
+	const collator = new Intl.Collator(lang)
+	return Object.keys(PLATES)
+		.map((code) => ({ code, name: names.of(code) }))
+		.sort((a, b) => collator.compare(a.name, b.name))
+}
+
+// The country code for what was typed: a code we know, or a country name
+// in `lang` or English, in any case. Null while it matches nothing.
+export function resolveCountry(text, lang) {
+	const typed = text.trim().toLocaleLowerCase()
+	if (Object.hasOwn(PLATES, typed.toUpperCase())) return typed.toUpperCase()
+	for (const language of [lang, "en"]) {
+		const match = countryList(language).find((c) => c.name.toLocaleLowerCase() === typed)
+		if (match) return match.code
+	}
+	return null
+}
+
+// The models we know for a make, matched without case, or none.
+export function suggestedModels(make) {
+	const typed = make.trim().toLocaleLowerCase()
+	const key = Object.keys(MODELS).find((name) => name.toLocaleLowerCase() === typed)
+	return key ? MODELS[key] : []
+}
+
+// What the car form shows besides the typed values: the countries to
+// pick from, the models for the typed make, and the chosen country's
+// name, plate example and plate length.
+export function carFormHints(inputs, lang) {
+	const countries = countryList(lang)
+	const rule = PLATES[inputs.regCountry] ?? null
+	return {
+		countries,
+		models: suggestedModels(inputs.make),
+		country: countries.find((c) => c.code === inputs.regCountry) ?? null,
+		plate: rule && { min: rule.min, max: rule.max, example: rule.example },
+	}
 }
 
 // The typed car form as a car to store, and an error text key per field
@@ -112,7 +191,8 @@ export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax, mile
 		make: inputs.make.trim(),
 		model: inputs.model.trim(),
 		year: Number(inputs.year.trim()),
-		regNumber: inputs.regNumber.replace(/\s/g, "").toUpperCase(),
+		regCountry: inputs.regCountry,
+		regNumber: inputs.regNumber.replace(/[\s-]/g, "").toLocaleUpperCase(),
 		vin: optional(inputs.vin)?.toUpperCase() ?? null,
 		fuel: inputs.fuel,
 		engine: optional(inputs.engine),
@@ -124,15 +204,19 @@ export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax, mile
 		make: car.make !== "",
 		model: car.model !== "",
 		year: WHOLE_NUMBER.test(inputs.year.trim()) && car.year >= yearMin && car.year <= yearMax,
-		regNumber: car.regNumber !== "",
+		regCountry: Object.hasOwn(PLATES, car.regCountry),
+		regNumber:
+			car.regNumber !== "" &&
+			(plateFits(car.regNumber, PLATES[car.regCountry]) || "car.error.regNumberLength"),
 		vin: car.vin === null || VIN.test(car.vin),
 		fuel: fuels.includes(car.fuel),
 		mileage: WHOLE_NUMBER.test(inputs.mileage.trim()) && car.mileage <= mileageMax,
 	}
+	// A field is true when fine, false for its usual error, or another key.
 	const errors = Object.fromEntries(
-		Object.keys(valid)
-			.filter((field) => !valid[field])
-			.map((field) => [field, `car.error.${field}`])
+		Object.entries(valid)
+			.filter(([, ok]) => ok !== true)
+			.map(([field, ok]) => [field, ok || `car.error.${field}`])
 	)
 	return { car, errors }
 }
@@ -192,7 +276,7 @@ export function createController({ model, view, i18n, config, languages }) {
 			"set-theme": (_event, target) => choose("theme", target.dataset.value),
 			"set-currency": (_event, target) => choose("currency", target.dataset.currency),
 			"profile-name": (_event, target) => {
-				model.inputs.profile.name = target.value // no redraw while typing
+				model.inputs.profile.name = fixTyped(target, capitalFirst) // no redraw while typing
 			},
 			"create-profile": createProfile,
 			"choose-profile": (_event, target) => chooseProfile(target.dataset.id),
@@ -201,20 +285,18 @@ export function createController({ model, view, i18n, config, languages }) {
 				clearInputs()
 				go("carForm")
 			},
-			// A character the field can't hold is fixed in place. The caret
-			// stays after the same typed text, so a key pressed mid-field
-			// doesn't throw it to the end.
+			// The country is kept as its code once the typed name matches
+			// one. A new make or country changes the model suggestions and
+			// the plate example, so those are updated in place.
 			"car-input": (_event, target) => {
 				const { field } = target.dataset
-				if (!Object.hasOwn(model.inputs.car, field)) return
-				const value = typedCarInput(field, target.value)
-				model.inputs.car[field] = value
-				if (value === target.value) return
-				const caret = typedCarInput(
-					field,
-					target.value.slice(0, target.selectionStart ?? undefined)
-				).length
-				view.setFieldValue(target, value, caret)
+				const car = model.inputs.car
+				if (!Object.hasOwn(car, field)) return
+				const { lang } = resolvePreferences(model.app.preferences)
+				if (field === "regCountry")
+					car.regCountry = resolveCountry(target.value, lang) ?? target.value
+				else car[field] = fixTyped(target, (value) => typedCarInput(field, value, car.regCountry))
+				if (field === "make" || field === "regCountry") view.updateCarForm(carFormHints(car, lang))
 			},
 			"save-car": saveCar,
 			"cancel-car": () => {
@@ -241,6 +323,7 @@ export function createController({ model, view, i18n, config, languages }) {
 			profile: activeProfile(model.data),
 			cars: model.data.cars.filter((c) => c.profileId === model.data.activeProfileId),
 		}
+		if (model.app.page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		view.render(model, derived)
 		syncHeader(derived)
 		syncDocument(derived)
@@ -284,6 +367,18 @@ export function createController({ model, view, i18n, config, languages }) {
 		saveData(model.data)
 		clearInputs()
 		go(id ? "garage" : "profiles")
+	}
+
+	// What a field holds after `rule`. A character the field can't hold is
+	// fixed in place, and the caret stays after the same typed text, so a
+	// key pressed mid-field doesn't throw it to the end.
+	function fixTyped(target, rule) {
+		const value = rule(target.value)
+		if (value !== target.value) {
+			const caret = rule(target.value.slice(0, target.selectionStart ?? undefined)).length
+			view.setFieldValue(target, value, caret)
+		}
+		return value
 	}
 
 	function clearInputs() {

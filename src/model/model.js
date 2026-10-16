@@ -32,6 +32,7 @@ export const model = {
 			make: "",
 			model: "",
 			year: "",
+			regCountry: "NO", // a country code once a typed name matches one
 			regNumber: "",
 			vin: "",
 			fuel: "petrol",

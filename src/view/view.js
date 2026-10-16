@@ -18,6 +18,7 @@
    ====================================================================== */
 
 import { icon } from "../../design-system/components/icons.js"
+import { MAKES } from "../data/models.js"
 
 const THEME_OPTIONS = ["light", "dark"]
 
@@ -57,8 +58,12 @@ export function createView({ header, main }, i18n, config) {
 	// an h1 that takes focus (tabindex="-1") when the controller moves to it.
 	const PAGES = { profiles: profilesPage, garage: garagePage, carForm: carFormPage }
 
+	// The last render's translator, for updates made without a redraw.
+	let translate = (key) => key
+
 	function render(model, derived) {
 		const t = (key, vars) => i18n.t(derived.lang, key, vars)
+		translate = t
 		const page = PAGES[model.app.page] ?? garagePage
 		main.innerHTML = page(model, derived, t)
 	}
@@ -121,15 +126,17 @@ export function createView({ header, main }, i18n, config) {
 	// ones carry the required attribute. Year and odometer are text with a
 	// number keyboard: type="number" lets "e", "+", "-" and "." through, and
 	// the controller keeps them to digits as they are typed. Every field but
-	// fuel has an example under its label (car.hint.*).
+	// fuel shows a short example until something is typed (car.placeholder.*).
+	// The label stays above it, so the field is still named once it is filled.
 	const CAR_FIELDS = [
 		{ name: "nickname", attrs: `maxlength="${config.carNicknameMax}"` },
 		{ name: "make", required: true, attrs: 'list="car-makes"' },
-		{ name: "model", required: true },
+		{ name: "model", required: true, attrs: 'list="car-models"' },
 		{ name: "year", required: true, attrs: 'inputmode="numeric"' },
+		{ name: "regCountry", required: true, attrs: 'list="car-countries" spellcheck="false"' },
 		{ name: "regNumber", required: true, attrs: 'autocapitalize="characters" spellcheck="false"' },
 		{ name: "vin", attrs: 'maxlength="17" autocapitalize="characters" spellcheck="false"' },
-		{ name: "fuel", type: "select", hint: false },
+		{ name: "fuel", type: "select" },
 		{ name: "engine" },
 		{ name: "mileage", required: true, attrs: 'inputmode="numeric"' },
 	]
@@ -141,7 +148,12 @@ export function createView({ header, main }, i18n, config) {
 			<h1 tabindex="-1">${esc(t("carForm.title"))}</h1>
 			<form class="stack" data-submit="save-car" novalidate>
 				${CAR_FIELDS.map((field) => carField(model, derived, t, field)).join("")}
-				<datalist id="car-makes">${config.carMakes.map((make) => `<option value="${esc(make)}"></option>`).join("")}</datalist>
+				${datalist("car-makes", MAKES)}
+				${datalist("car-models", derived.carForm.models)}
+				${datalist(
+					"car-countries",
+					derived.carForm.countries.map((c) => c.name)
+				)}
 				<div class="cluster">
 					<button class="btn btn-primary" type="submit">${esc(t("car.save"))}</button>
 					<button class="btn" type="button" data-action="cancel-car">${esc(t("car.cancel"))}</button>
@@ -149,26 +161,36 @@ export function createView({ header, main }, i18n, config) {
 			</form>`
 	}
 
+	// The registration number's example follows the chosen country, and
+	// has none until a country matches.
+	function placeholder(t, name, plate) {
+		if (name !== "regNumber") return t(`car.placeholder.${name}`)
+		return plate ? t("car.placeholder.regNumber", { example: plate.example }) : ""
+	}
+
+	// Suggestions for an <input list>. The browser filters them as the
+	// user types, and any other value can still be typed.
+	function datalist(id, values) {
+		return `<datalist id="${id}">${datalistOptions(values)}</datalist>`
+	}
+
+	function datalistOptions(values) {
+		return values.map((value) => `<option value="${esc(value)}"></option>`).join("")
+	}
+
 	// One labelled field. Every keystroke goes to the controller as
 	// "car-input" with the field's name, so the form needs no redraw.
-	// The error is read before the hint, since it is what needs fixing.
-	function carField(
-		model,
-		derived,
-		t,
-		{ name, type = "text", required = false, hint = true, attrs = "" }
-	) {
+	function carField(model, derived, t, { name, type = "text", required = false, attrs = "" }) {
+		const { country, plate } = derived.carForm
 		const id = `car-${name}`
-		const value = model.inputs.car[name]
+		// A country is kept as its code once it matches, and shown by name.
+		const value = name === "regCountry" && country ? country.name : model.inputs.car[name]
 		const error = model.inputs.errors[name]
 		const errorId = `${id}-error`
-		const hintId = `${id}-hint`
-		const describedBy = [error ? errorId : "", hint ? hintId : ""].filter(Boolean).join(" ")
 		const shared = [
 			`id="${id}" name="${name}" data-input="car-input" data-field="${name}"`,
 			required ? "required" : "",
-			error ? 'aria-invalid="true"' : "",
-			describedBy ? `aria-describedby="${describedBy}"` : "",
+			error ? `aria-invalid="true" aria-describedby="${errorId}"` : "",
 			attrs,
 		].join(" ")
 		const control =
@@ -179,16 +201,19 @@ export function createView({ header, main }, i18n, config) {
 								`<option value="${esc(fuel)}"${fuel === value ? " selected" : ""}>${esc(t(`fuel.${fuel}`))}</option>`
 						)
 						.join("")}</select>`
-				: `<input class="input" type="${type}" autocomplete="off" ${shared} value="${esc(value)}" />`
+				: `<input class="input" type="${type}" autocomplete="off" ${shared} value="${esc(value)}"
+						placeholder="${esc(placeholder(t, name, plate))}" />`
 		const vars = {
 			max: config.carNicknameMax,
 			min: config.carYearMin,
 			maxKm: new Intl.NumberFormat(derived.lang).format(config.carMileageMax),
+			country: country?.name,
+			plateMin: plate?.min,
+			plateMax: plate?.max,
 		}
 		return `
 			<div class="field">
 				<label class="label" for="${id}">${esc(t(`car.${name}`))}</label>
-				${hint ? `<p class="help" id="${hintId}">${esc(t(`car.hint.${name}`))}</p>` : ""}
 				${control}
 				${error ? `<p class="field-error" id="${errorId}">${esc(t(error, vars))}</p>` : ""}
 			</div>`
@@ -355,6 +380,16 @@ export function createView({ header, main }, i18n, config) {
 		main.querySelector(`#${id}`)?.focus()
 	}
 
+	// A new make or country while the car form is open: the model
+	// suggestions and the plate example change without a redraw, so
+	// nothing typed and no focus is lost.
+	function updateCarForm({ models, plate }) {
+		const list = main.querySelector("#car-models")
+		if (list) list.innerHTML = datalistOptions(models)
+		const reg = main.querySelector("#car-regNumber")
+		if (reg) reg.placeholder = placeholder(translate, "regNumber", plate)
+	}
+
 	// A field whose typed value the controller fixed (a letter in the year,
 	// say). The caret goes back where the controller says, not to the end.
 	function setFieldValue(input, value, caret) {
@@ -390,6 +425,7 @@ export function createView({ header, main }, i18n, config) {
 		focusHeading,
 		focusField,
 		setFieldValue,
+		updateCarForm,
 		bindActions,
 	}
 }
