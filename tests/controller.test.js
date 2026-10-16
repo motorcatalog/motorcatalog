@@ -17,6 +17,7 @@ import {
 	resolvePreferences,
 	STORAGE_KEY,
 	systemCurrency,
+	typedCarInput,
 	validateCar,
 	validateProfileName,
 } from "../src/controller/controller.js"
@@ -54,6 +55,7 @@ function fakeView() {
 		focused: [],
 		headings: 0,
 		fields: [],
+		corrected: [],
 		handlers: {},
 		derived: null,
 		render(_model, derived) {
@@ -64,6 +66,7 @@ function fakeView() {
 		focusPicker: (name) => view.focused.push(name),
 		focusHeading: () => view.headings++,
 		focusField: (id) => view.fields.push(id),
+		setFieldValue: (_input, value, caret) => view.corrected.push({ value, caret }),
 		bindActions: (handlers) => Object.assign(view.handlers, handlers),
 	}
 	return view
@@ -478,7 +481,13 @@ const TYPED = Object.freeze({
 	mileage: "184000",
 	euInspectionDue: "",
 })
-const RULES = { fuels: config.fuels, nicknameMax: 40, yearMin: 1900, yearMax: 2027 }
+const RULES = {
+	fuels: config.fuels,
+	nicknameMax: 40,
+	yearMin: 1900,
+	yearMax: 2027,
+	mileageMax: 10_000_000,
+}
 
 test("validateCar cleans up a valid car: trims, capitals, numbers and null for empty", () => {
 	const { car, errors } = validateCar(TYPED, RULES)
@@ -533,6 +542,36 @@ test("validateCar takes the odometer as whole km from 0", () => {
 	}
 })
 
+test("validateCar caps the odometer at 10 000 000 km", () => {
+	assert.deepEqual(validateCar({ ...TYPED, mileage: "10000000" }, RULES).errors, {})
+	assert.deepEqual(validateCar({ ...TYPED, mileage: "10000001" }, RULES).errors, {
+		mileage: "car.error.mileage",
+	})
+})
+
+test("typedCarInput gives nickname and engine a capital first letter, and leaves make and model alone", () => {
+	assert.equal(typedCarInput("nickname", " helgebilen"), " Helgebilen")
+	assert.equal(typedCarInput("engine", "v8 biturbo"), "V8 biturbo")
+	assert.equal(typedCarInput("engine", "4.0 v8"), "4.0 v8")
+	assert.equal(typedCarInput("nickname", "ærfuglen"), "Ærfuglen")
+	assert.equal(typedCarInput("make", "e-tron"), "e-tron")
+	assert.equal(typedCarInput("model", "iX"), "iX")
+})
+
+test("typedCarInput shows registration number and VIN in capitals", () => {
+	assert.equal(typedCarInput("regNumber", "ab 12345"), "AB 12345")
+	assert.equal(typedCarInput("vin", "wdd2050871f123456"), "WDD2050871F123456")
+})
+
+test("typedCarInput keeps digits only: four for the year, eight for the odometer", () => {
+	assert.equal(typedCarInput("year", "20e1+5"), "2015")
+	assert.equal(typedCarInput("year", "20155"), "2015")
+	assert.equal(typedCarInput("mileage", "1 000 000"), "1000000")
+	assert.equal(typedCarInput("mileage", "-12.5"), "125")
+	assert.equal(typedCarInput("mileage", "123456789"), "12345678")
+	assert.equal(typedCarInput("fuel", "diesel"), "diesel")
+})
+
 test("validateCar takes a VIN of 17 letters and digits without I, O or Q", () => {
 	for (const vin of [
 		"YV1SW58D48271234",
@@ -577,6 +616,20 @@ test("typing into a car field updates the input without a redraw", () => {
 	assert.equal(view.renders, renders)
 	view.handlers["car-input"](null, { dataset: { field: "nope" }, value: "x" }) // unknown field
 	assert.equal("nope" in model.inputs.car, false)
+})
+
+test("a typed character a field can't hold is fixed in place, with the caret kept", () => {
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"]) }))
+	view.handlers["add-car"]()
+	view.handlers["car-input"](null, { dataset: { field: "make" }, value: "e-tron" })
+	assert.deepEqual(view.corrected, []) // nothing to fix, so the field is left alone
+	view.handlers["car-input"](null, {
+		dataset: { field: "year" },
+		value: "20e15",
+		selectionStart: 3,
+	})
+	assert.equal(model.inputs.car.year, "2015")
+	assert.deepEqual(view.corrected, [{ value: "2015", caret: 2 }])
 })
 
 test("saving a valid car adds it to the active profile, saves it and opens the garage", () => {

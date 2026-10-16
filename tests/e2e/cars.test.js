@@ -115,3 +115,28 @@ test("Cancel returns to the garage and saves nothing", async () => {
 	assert.equal(await page.$eval("#car-make", (el) => el.value), "") // starts afresh
 	await page.browserContext().close()
 })
+
+test("fields fix what is typed in place and keep the caret", async () => {
+	const page = await openGarage()
+	await openForm(page)
+	const value = (id) => page.$eval(id, (el) => el.value)
+	await page.type("#car-nickname", "helgebilen")
+	await page.type("#car-make", "mercedes-benz")
+	await page.type("#car-regNumber", "ab 12345")
+	await page.type("#car-year", "20e1.5")
+	await page.type("#car-mileage", "1 000 000 000")
+	assert.equal(await value("#car-nickname"), "Helgebilen")
+	assert.equal(await value("#car-make"), "mercedes-benz")
+	assert.equal(await value("#car-regNumber"), "AB 12345")
+	assert.equal(await value("#car-year"), "2015")
+	assert.equal(await value("#car-mileage"), "10000000")
+
+	// A rejected key in the middle of the year leaves the caret where it was.
+	await page.focus("#car-year")
+	await page.keyboard.press("Home")
+	await page.keyboard.press("ArrowRight")
+	await page.keyboard.type("x")
+	assert.equal(await value("#car-year"), "2015")
+	assert.equal(await page.$eval("#car-year", (el) => el.selectionStart), 1)
+	await page.browserContext().close()
+})

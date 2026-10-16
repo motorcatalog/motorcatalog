@@ -308,7 +308,10 @@ test("the car form has a label per field, marks the required ones and lists the 
 	const fuels = [...main.querySelectorAll("#car-fuel option")].map((o) => o.value)
 	assert.deepEqual(fuels, config.fuels)
 	assert.equal(main.querySelector("#car-fuel").value, "petrol")
-	assert.equal(main.querySelector("#car-year").type, "number")
+	for (const id of ["#car-year", "#car-mileage"]) {
+		assert.equal(main.querySelector(id).type, "text", id)
+		assert.equal(main.querySelector(id).inputMode, "numeric", id)
+	}
 	assert.equal(main.querySelector("form button[type='submit']").textContent, bundles.en["car.save"])
 	assert.equal(text(main.querySelector("[data-action='cancel-car']")), bundles.en["car.cancel"])
 })
@@ -321,7 +324,11 @@ test("the car form keeps what was typed and shows each error under its field", (
 			profiles: ["Malin"],
 			active: 0,
 			car: { model: "V70", fuel: "diesel", nickname: "<b>x</b>" },
-			carErrors: { make: "car.error.make", nickname: "car.error.nickname" },
+			carErrors: {
+				make: "car.error.make",
+				nickname: "car.error.nickname",
+				mileage: "car.error.mileage",
+			},
 		})
 	)
 	assert.equal(main.querySelector("#car-model").value, "V70")
@@ -330,15 +337,45 @@ test("the car form keeps what was typed and shows each error under its field", (
 	assert.equal(main.querySelector("b"), null)
 	const make = main.querySelector("#car-make")
 	assert.equal(make.getAttribute("aria-invalid"), "true")
-	assert.equal(
-		text(main.querySelector(`#${make.getAttribute("aria-describedby")}`)),
-		bundles.en["car.error.make"]
-	)
+	assert.equal(make.getAttribute("aria-describedby"), "car-make-error car-make-hint")
+	assert.equal(text(main.querySelector("#car-make-error")), bundles.en["car.error.make"])
 	assert.equal(
 		text(main.querySelector("#car-nickname-error")),
 		bundles.en["car.error.nickname"].replace("{max}", "40")
 	)
+	assert.equal(
+		text(main.querySelector("#car-mileage-error")),
+		bundles.en["car.error.mileage"].replace("{maxKm}", "10,000,000")
+	)
 	assert.equal(main.querySelector("#car-model").hasAttribute("aria-invalid"), false)
+})
+
+test("every car field but fuel has an example under its label, read with the field", () => {
+	const { main } = mount(screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0 }))
+	const fields = [...main.querySelectorAll("[data-input='car-input']")]
+	for (const el of fields) {
+		const { field } = el.dataset
+		const hint = main.querySelector(`#car-${field}-hint`)
+		if (field === "fuel") {
+			assert.equal(hint, null)
+			continue
+		}
+		assert.equal(text(hint), bundles.en[`car.hint.${field}`], field)
+		assert.equal(el.getAttribute("aria-describedby"), `car-${field}-hint`, field)
+	}
+	assert.match(text(main.querySelector("#car-make-hint")), /Mercedes-Benz/)
+	assert.match(text(main.querySelector("#car-model-hint")), /C63 AMG/)
+})
+
+test("make suggests the built-in list of makes", () => {
+	const { main } = mount(screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0 }))
+	const list = main.querySelector(
+		`datalist#${main.querySelector("#car-make").getAttribute("list")}`
+	)
+	const makes = [...list.querySelectorAll("option")].map((o) => o.value)
+	assert.deepEqual(makes, config.carMakes)
+	assert.ok(makes.includes("Mercedes-Benz"))
+	assert.equal(main.querySelector("#car-model").hasAttribute("list"), false)
 })
 
 test("the header shows the active profile and Switch profile, and neither without one", () => {

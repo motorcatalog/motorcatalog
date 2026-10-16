@@ -83,10 +83,29 @@ const WHOLE_NUMBER = /^\d+$/
 // mistaken for 1 and 0.
 const VIN = /^[A-HJ-NPR-Z0-9]{17}$/
 
+// What a car field holds while it is typed, so the user sees the rule at
+// once. Make and model are left alone: names like "e-tron" and "iX" start
+// in lower case. Spaces in the registration number go when it is saved.
+const CAPITAL_FIRST = (value) => value.replace(/^\s*\p{L}/u, (start) => start.toLocaleUpperCase())
+const CAPITALS = (value) => value.toLocaleUpperCase()
+const DIGITS = (max) => (value) => value.replace(/\D/g, "").slice(0, max)
+const TYPED_RULES = {
+	nickname: CAPITAL_FIRST,
+	engine: CAPITAL_FIRST,
+	regNumber: CAPITALS,
+	vin: CAPITALS,
+	year: DIGITS(4),
+	mileage: DIGITS(8), // 10 000 000 has eight digits
+}
+
+export function typedCarInput(field, value) {
+	return TYPED_RULES[field]?.(value) ?? value
+}
+
 // The typed car form as a car to store, and an error text key per field
 // that is wrong. Errors come in form order, so the first one is the field
 // to focus. Empty optional text is stored as null, never "".
-export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax }) {
+export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax, mileageMax }) {
 	const optional = (value) => value.trim() || null
 	const car = {
 		nickname: optional(inputs.nickname),
@@ -108,7 +127,7 @@ export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax }) {
 		regNumber: car.regNumber !== "",
 		vin: car.vin === null || VIN.test(car.vin),
 		fuel: fuels.includes(car.fuel),
-		mileage: WHOLE_NUMBER.test(inputs.mileage.trim()) && Number.isSafeInteger(car.mileage),
+		mileage: WHOLE_NUMBER.test(inputs.mileage.trim()) && car.mileage <= mileageMax,
 	}
 	const errors = Object.fromEntries(
 		Object.keys(valid)
@@ -182,9 +201,20 @@ export function createController({ model, view, i18n, config, languages }) {
 				clearInputs()
 				go("carForm")
 			},
+			// A character the field can't hold is fixed in place. The caret
+			// stays after the same typed text, so a key pressed mid-field
+			// doesn't throw it to the end.
 			"car-input": (_event, target) => {
 				const { field } = target.dataset
-				if (Object.hasOwn(model.inputs.car, field)) model.inputs.car[field] = target.value
+				if (!Object.hasOwn(model.inputs.car, field)) return
+				const value = typedCarInput(field, target.value)
+				model.inputs.car[field] = value
+				if (value === target.value) return
+				const caret = typedCarInput(
+					field,
+					target.value.slice(0, target.selectionStart ?? undefined)
+				).length
+				view.setFieldValue(target, value, caret)
 			},
 			"save-car": saveCar,
 			"cancel-car": () => {
@@ -270,6 +300,7 @@ export function createController({ model, view, i18n, config, languages }) {
 			nicknameMax: config.carNicknameMax,
 			yearMin: config.carYearMin,
 			yearMax: new Date().getFullYear() + 1,
+			mileageMax: config.carMileageMax,
 		})
 		const fields = Object.keys(errors)
 		if (fields.length > 0) {

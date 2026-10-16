@@ -118,36 +118,30 @@ export function createView({ header, main }, i18n, config) {
 
 	// The car form's fields in form order (docs/design/data-model.md, Car).
 	// The labels of optional fields say "(optional)", so only the required
-	// ones carry the required attribute.
+	// ones carry the required attribute. Year and odometer are text with a
+	// number keyboard: type="number" lets "e", "+", "-" and "." through, and
+	// the controller keeps them to digits as they are typed. Every field but
+	// fuel has an example under its label (car.hint.*).
 	const CAR_FIELDS = [
 		{ name: "nickname", attrs: `maxlength="${config.carNicknameMax}"` },
-		{ name: "make", required: true },
+		{ name: "make", required: true, attrs: 'list="car-makes"' },
 		{ name: "model", required: true },
-		{
-			name: "year",
-			type: "number",
-			required: true,
-			attrs: `inputmode="numeric" min="${config.carYearMin}" step="1"`,
-		},
+		{ name: "year", required: true, attrs: 'inputmode="numeric"' },
 		{ name: "regNumber", required: true, attrs: 'autocapitalize="characters" spellcheck="false"' },
 		{ name: "vin", attrs: 'maxlength="17" autocapitalize="characters" spellcheck="false"' },
-		{ name: "fuel", type: "select" },
+		{ name: "fuel", type: "select", hint: false },
 		{ name: "engine" },
-		{
-			name: "mileage",
-			type: "number",
-			required: true,
-			attrs: 'inputmode="numeric" min="0" step="1"',
-		},
+		{ name: "mileage", required: true, attrs: 'inputmode="numeric"' },
 	]
 
 	// novalidate: each error is our own text under its field, the same way
 	// as on the profile form.
-	function carFormPage(model, _derived, t) {
+	function carFormPage(model, derived, t) {
 		return `
 			<h1 tabindex="-1">${esc(t("carForm.title"))}</h1>
 			<form class="stack" data-submit="save-car" novalidate>
-				${CAR_FIELDS.map((field) => carField(model, t, field)).join("")}
+				${CAR_FIELDS.map((field) => carField(model, derived, t, field)).join("")}
+				<datalist id="car-makes">${config.carMakes.map((make) => `<option value="${esc(make)}"></option>`).join("")}</datalist>
 				<div class="cluster">
 					<button class="btn btn-primary" type="submit">${esc(t("car.save"))}</button>
 					<button class="btn" type="button" data-action="cancel-car">${esc(t("car.cancel"))}</button>
@@ -157,15 +151,24 @@ export function createView({ header, main }, i18n, config) {
 
 	// One labelled field. Every keystroke goes to the controller as
 	// "car-input" with the field's name, so the form needs no redraw.
-	function carField(model, t, { name, type = "text", required = false, attrs = "" }) {
+	// The error is read before the hint, since it is what needs fixing.
+	function carField(
+		model,
+		derived,
+		t,
+		{ name, type = "text", required = false, hint = true, attrs = "" }
+	) {
 		const id = `car-${name}`
 		const value = model.inputs.car[name]
 		const error = model.inputs.errors[name]
 		const errorId = `${id}-error`
+		const hintId = `${id}-hint`
+		const describedBy = [error ? errorId : "", hint ? hintId : ""].filter(Boolean).join(" ")
 		const shared = [
 			`id="${id}" name="${name}" data-input="car-input" data-field="${name}"`,
 			required ? "required" : "",
-			error ? `aria-invalid="true" aria-describedby="${errorId}"` : "",
+			error ? 'aria-invalid="true"' : "",
+			describedBy ? `aria-describedby="${describedBy}"` : "",
 			attrs,
 		].join(" ")
 		const control =
@@ -177,10 +180,15 @@ export function createView({ header, main }, i18n, config) {
 						)
 						.join("")}</select>`
 				: `<input class="input" type="${type}" autocomplete="off" ${shared} value="${esc(value)}" />`
-		const vars = { max: config.carNicknameMax, min: config.carYearMin }
+		const vars = {
+			max: config.carNicknameMax,
+			min: config.carYearMin,
+			maxKm: new Intl.NumberFormat(derived.lang).format(config.carMileageMax),
+		}
 		return `
 			<div class="field">
 				<label class="label" for="${id}">${esc(t(`car.${name}`))}</label>
+				${hint ? `<p class="help" id="${hintId}">${esc(t(`car.hint.${name}`))}</p>` : ""}
 				${control}
 				${error ? `<p class="field-error" id="${errorId}">${esc(t(error, vars))}</p>` : ""}
 			</div>`
@@ -347,6 +355,13 @@ export function createView({ header, main }, i18n, config) {
 		main.querySelector(`#${id}`)?.focus()
 	}
 
+	// A field whose typed value the controller fixed (a letter in the year,
+	// say). The caret goes back where the controller says, not to the end.
+	function setFieldValue(input, value, caret) {
+		input.value = value
+		input.setSelectionRange(caret, caret)
+	}
+
 	// One delegated listener per event type and root. Each type has its own
 	// attribute, so a click on a submit button never fires the form's action:
 	//   <button data-action="x">  click
@@ -368,5 +383,13 @@ export function createView({ header, main }, i18n, config) {
 		}
 	}
 
-	return { render, renderHeader, focusPicker, focusHeading, focusField, bindActions }
+	return {
+		render,
+		renderHeader,
+		focusPicker,
+		focusHeading,
+		focusField,
+		setFieldValue,
+		bindActions,
+	}
 }
