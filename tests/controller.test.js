@@ -760,6 +760,23 @@ test("the garage only hands the view the active profile's cars", () => {
 	)
 })
 
+test("opening a car card selects the car and keeps the link from changing the URL", () => {
+	const saved = JSON.parse(dataWith(["Malin", "Rune"], 0))
+	saved.cars = [
+		{ id: "c0", profileId: "p0", make: "Volvo" },
+		{ id: "c1", profileId: "p1", make: "Saab" },
+	]
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: JSON.stringify(saved) }))
+	let prevented = 0
+	const click = { preventDefault: () => prevented++ }
+	view.handlers["open-car"](click, { dataset: { id: "c0" } })
+	assert.equal(model.app.selectedCarId, "c0")
+	assert.equal(prevented, 1)
+	view.handlers["open-car"](click, { dataset: { id: "c1" } }) // another profile's car
+	view.handlers["open-car"](click, { dataset: { id: "nope" } })
+	assert.equal(model.app.selectedCarId, "c0")
+})
+
 test("a car can't be saved without an active profile", () => {
 	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"], null) }))
 	fillCar(view, TYPED)

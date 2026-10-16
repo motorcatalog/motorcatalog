@@ -103,7 +103,7 @@ Headings (`h1` to `h4`) already use Fraunces. Colours and contrast rules: [`docs
 
 ## Status
 
-Sprint 1: profiles and adding a car work. The garage list is next.
+Sprint 1: profiles, adding a car and the garage list work.
 
 ## License
 

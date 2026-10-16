@@ -53,3 +53,81 @@ main h1[tabindex="-1"]:focus {
 	font-weight: 600;
 	overflow-wrap: anywhere;
 }
+
+/* The garage: one card per car. One column on a phone, two from 768 px,
+   three from 1024 px. */
+.car-list {
+	list-style: none;
+	padding: 0;
+	display: grid;
+	gap: var(--space-4);
+}
+@media (min-width: 768px) {
+	.car-list {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+@media (min-width: 1024px) {
+	.car-list {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+/* The whole card is the title's link: its ::after covers the card, so a
+   click anywhere opens the car. The focus ring is drawn on the card, the
+   shape the user clicks, instead of around the title text. */
+.car-card {
+	position: relative;
+	display: grid;
+	gap: var(--space-2);
+	align-content: start;
+}
+.car-card-title {
+	font-size: var(--text-lg);
+	overflow-wrap: anywhere;
+}
+.car-card-title a {
+	text-decoration: none;
+}
+.car-card-title a::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+}
+.car-card-title a:focus-visible {
+	outline: none;
+	box-shadow: none;
+}
+.car-card:has(a:focus-visible) {
+	outline: 2px solid var(--accent-strong);
+	outline-offset: 2px;
+	box-shadow: var(--shadow-focus);
+}
+.car-card-make,
+.car-card-meta {
+	color: var(--text-muted);
+}
+
+/* Two facts side by side, each label over its value. A VIN is 17
+   characters, too wide for half a phone-sized card, so it takes the full
+   row under them. Every card shares the first row. */
+.car-card-facts {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--space-3) var(--space-4);
+	margin-top: var(--space-2);
+}
+.car-card-vin {
+	grid-column: 1 / -1;
+}
+.car-card-facts dt {
+	color: var(--text-muted);
+	font-size: var(--text-sm);
+}
+.car-card-facts dd {
+	margin: 0;
+	color: var(--text);
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}

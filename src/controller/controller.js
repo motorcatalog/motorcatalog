@@ -299,6 +299,10 @@ export function createController({ model, view, i18n, config, languages }) {
 				if (field === "make" || field === "regCountry") view.updateCarForm(carFormHints(car, lang))
 			},
 			"save-car": saveCar,
+			"open-car": (event, target) => {
+				event.preventDefault()
+				openCar(target.dataset.id)
+			},
 			"cancel-car": () => {
 				clearInputs()
 				go("garage")
@@ -408,6 +412,17 @@ export function createController({ model, view, i18n, config, languages }) {
 		saveData(model.data)
 		clearInputs()
 		go("garage")
+	}
+
+	// A car card was clicked. Only the active profile's own cars can be
+	// selected.
+	// deferred: no car page yet, so nothing changes on screen. The car
+	// detail story in Sprint 2 adds the page and calls go("car") here.
+	function openCar(id) {
+		const own = model.data.cars.some(
+			(c) => c.id === id && c.profileId === model.data.activeProfileId
+		)
+		if (own) model.app.selectedCarId = id
 	}
 
 	// An explicit choice, or "" / null for the System row. A repeat of the

@@ -275,30 +275,123 @@ test("a profile name with markup is rendered as text, not as HTML", () => {
 	assert.equal(text(header.querySelector(".header-profile-name")), "<b>x</b>")
 })
 
+// A saved car as the car form stores it, owned by profile p0.
+const VOLVO = {
+	id: "c0",
+	profileId: "p0",
+	nickname: null,
+	make: "Volvo",
+	model: "V70",
+	year: 2008,
+	regCountry: "NO",
+	regNumber: "AB12345",
+	vin: null,
+	fuel: "diesel",
+	engine: null,
+	mileage: 184000,
+	euInspectionDue: null,
+}
+
+// The facts on a card as label and value pairs.
+const facts = (card) =>
+	[...card.querySelectorAll("dt")].map((dt) => [text(dt), text(dt.nextElementSibling)])
+
+function garage(lang, cars) {
+	return mount(screen({ chosen: { lang }, page: "garage", profiles: ["Malin"], active: 0, cars }))
+		.main
+}
+
 test("the garage has its heading, Add car and an empty line until the profile has a car", () => {
 	const { main } = mount(screen({ ...en, page: "garage", profiles: ["Malin"], active: 0 }))
 	const h1 = main.querySelector("h1")
 	assert.equal(text(h1), bundles.en["garage.title"])
 	assert.equal(h1.getAttribute("tabindex"), "-1")
-	assert.equal(text(main.querySelector("h1 + p")), bundles.en["garage.empty"])
+	assert.equal(text(main.querySelector(".garage-empty")), bundles.en["garage.empty"])
 	assert.equal(text(main.querySelector("[data-action='add-car']")), bundles.en["garage.addCar"])
+	assert.equal(main.querySelector(".car-list"), null)
 	assert.equal(main.querySelector("form"), null)
 
-	const someoneElses = [{ id: "c0", profileId: "p1", make: "Saab" }]
+	const someoneElses = [{ ...VOLVO, profileId: "p1" }]
 	const other = mount(
 		screen({ ...en, page: "garage", profiles: ["Malin", "Rune"], active: 0, cars: someoneElses })
 	)
-	assert.equal(text(other.main.querySelector("h1 + p")), bundles.en["garage.empty"])
+	assert.equal(text(other.main.querySelector(".garage-empty")), bundles.en["garage.empty"])
+	assert.equal(other.main.querySelector(".car-card"), null)
 	const own = mount(
-		screen({
-			...en,
-			page: "garage",
-			profiles: ["Malin"],
-			active: 0,
-			cars: [{ id: "c0", profileId: "p0" }],
-		})
+		screen({ ...en, page: "garage", profiles: ["Malin"], active: 0, cars: [VOLVO] })
 	)
-	assert.equal(own.main.querySelector("h1 + p"), null)
+	assert.equal(own.main.querySelector(".garage-empty"), null)
+	assert.ok(own.main.querySelector("[data-action='add-car']"))
+})
+
+test("a car card shows make and model, year and fuel, the registration number and the odometer", () => {
+	const main = garage("en", [VOLVO])
+	const cards = main.querySelectorAll(".car-list > li.car-card")
+	assert.equal(cards.length, 1)
+	const [card] = cards
+	assert.equal(text(card.querySelector("h2")), "Volvo V70")
+	assert.equal(card.querySelector(".car-card-make"), null) // no nickname, no second line
+	assert.equal(text(card.querySelector(".car-card-meta")), "2008 · Diesel")
+	assert.deepEqual(facts(card), [
+		[bundles.en["garage.regNumber"], "AB12345"],
+		[bundles.en["garage.mileage"], "184,000 km"],
+	])
+})
+
+test("a nickname is the card title, with make and model under it", () => {
+	const card = garage("en", [{ ...VOLVO, nickname: "Weekend car" }]).querySelector(".car-card")
+	assert.equal(text(card.querySelector("h2")), "Weekend car")
+	assert.equal(text(card.querySelector(".car-card-make")), "Volvo V70")
+})
+
+test("a VIN shows with the registration number, and nothing shows without one", () => {
+	const vin = "YV1SW61R021234567"
+	const card = garage("en", [{ ...VOLVO, vin }]).querySelector(".car-card")
+	assert.deepEqual(facts(card), [
+		[bundles.en["garage.regNumber"], "AB12345"],
+		[bundles.en["garage.mileage"], "184,000 km"],
+		[bundles.en["garage.vin"], vin],
+	])
+	const without = garage("en", [VOLVO]).querySelector(".car-card")
+	assert.ok(!facts(without).some(([label]) => label === bundles.en["garage.vin"]))
+})
+
+test("the card follows the chosen language, numbers included", () => {
+	const card = garage("nb", [VOLVO]).querySelector(".car-card")
+	assert.equal(text(card.querySelector(".car-card-meta")), "2008 · Diesel")
+	const [, odometer] = facts(card)
+	assert.equal(odometer[0], bundles.nb["garage.mileage"])
+	// Norwegian groups thousands with a no-break space.
+	assert.equal(odometer[1], "184 000 km")
+	assert.equal(
+		text(garage("nb", [{ ...VOLVO, fuel: "petrol" }]).querySelector(".car-card-meta")),
+		"2008 · Bensin"
+	)
+})
+
+test("each card is one link that names the car, in the order the cars were added", () => {
+	const saab = { ...VOLVO, id: "c1", make: "Saab", model: "9-3", nickname: "Old faithful" }
+	const main = garage("en", [VOLVO, saab])
+	const cards = [...main.querySelectorAll(".car-card")]
+	assert.equal(cards.length, 2)
+	for (const card of cards) assert.equal(card.querySelectorAll("a, button").length, 1)
+	const links = cards.map((card) => card.querySelector("a"))
+	assert.deepEqual(
+		links.map((a) => [text(a), a.dataset.action, a.dataset.id, a.getAttribute("href")]),
+		[
+			["Volvo V70", "open-car", "c0", "#car-c0"],
+			["Old faithful", "open-car", "c1", "#car-c1"],
+		]
+	)
+})
+
+test("a card escapes what the user typed", () => {
+	const card = garage("en", [
+		{ ...VOLVO, nickname: "<b>x</b>", make: "<i>M</i>", vin: null },
+	]).querySelector(".car-card")
+	assert.equal(card.querySelector("b, i"), null)
+	assert.equal(text(card.querySelector("h2")), "<b>x</b>")
+	assert.equal(text(card.querySelector(".car-card-make")), "<i>M</i> V70")
 })
 
 test("the car form has a label per field, marks the required ones and lists the fuels", () => {
