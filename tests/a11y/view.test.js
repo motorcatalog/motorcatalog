@@ -27,7 +27,7 @@ function screenFor(lang) {
 	const model = structuredClone(initialModel)
 	model.app.preferences.chosen.lang = lang
 	model.app.preferences.system = { lang: "nb", theme: "dark", currency: "NOK" }
-	return { model, derived: resolvePreferences(model.app.preferences) }
+	return { model, derived: { ...resolvePreferences(model.app.preferences), cars: [] } }
 }
 
 let dom
@@ -59,7 +59,7 @@ for (const name of ["lang", "theme", "currency"]) {
 	})
 }
 
-// Every page the profile story adds, with the header row for the active
+// Every page the profile and add car stories add, with the header row for the active
 // profile where there is one.
 const PAGES = {
 	"the welcome page": { page: "profiles", profiles: [], active: null },
@@ -71,9 +71,16 @@ const PAGES = {
 		error: "profile.error.required",
 	},
 	"the garage with an active profile": { page: "garage", profiles: ["Malin"], active: 0 },
+	"the car form": { page: "carForm", profiles: ["Malin"], active: 0 },
+	"the car form with errors": {
+		page: "carForm",
+		profiles: ["Malin"],
+		active: 0,
+		errors: { make: "car.error.make", year: "car.error.year", vin: "car.error.vin" },
+	},
 }
 
-for (const [name, { page, profiles, active, error }] of Object.entries(PAGES)) {
+for (const [name, { page, profiles, active, error, errors }] of Object.entries(PAGES)) {
 	test(`${name} has no axe violations`, async () => {
 		dom = createMount("en")
 		const view = createView({ header: dom.header, main: dom.mount }, i18n, MULTI_CURRENCY)
@@ -82,6 +89,7 @@ for (const [name, { page, profiles, active, error }] of Object.entries(PAGES)) {
 		model.data.profiles = profiles.map((n, i) => ({ id: `p${i}`, name: n }))
 		model.data.activeProfileId = active === null ? null : `p${active}`
 		if (error) model.inputs.errors = { name: error }
+		if (errors) model.inputs.errors = errors
 		derived.profile = model.data.profiles[active] ?? null
 		view.renderHeader(model, derived)
 		view.render(model, derived)

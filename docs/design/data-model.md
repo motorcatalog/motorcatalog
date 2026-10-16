@@ -35,6 +35,7 @@ erDiagram
   CAR {
     string id PK
     string profileId FK
+    string nickname "optional"
     string make
     string model
     number year
@@ -84,6 +85,7 @@ A local profile that keeps one person's cars apart from another's on a shared de
 |---|---|---|
 | `id` | string | From `crypto.randomUUID()` |
 | `profileId` | string | The profile that owns the car |
+| `nickname` | string or null | Optional, trimmed, at most 40 characters. When it is set it is the car's title, with make and model under it |
 | `make` | string | Required, e.g. "Volvo" |
 | `model` | string | Required, e.g. "V70" |
 | `year` | number | 1900 to next year |
@@ -131,7 +133,7 @@ A maintenance to-do or reminder, like "Change to winter tyres" or "Timing belt".
 ```js
 export const model = {
   app: {
-    page: "garage", // garage | car | history | maintenance | costs | profiles
+    page: "garage", // garage | carForm | car | history | maintenance | costs | profiles
     selectedCarId: null,
     historyFilter: "all", // all | service | repair | other
     costsYear: null, // null = the current year
@@ -143,7 +145,7 @@ export const model = {
   inputs: {
     profile: { name: "" },
     car: {
-      make: "", model: "", year: "", regNumber: "", vin: "",
+      nickname: "", make: "", model: "", year: "", regNumber: "", vin: "",
       fuel: "petrol", engine: "", mileage: "", euInspectionDue: "",
     },
     serviceEntry: {

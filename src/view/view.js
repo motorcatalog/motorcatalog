@@ -55,7 +55,7 @@ export function createView({ header, main }, i18n, config) {
 
 	// One function per page, picked by model.app.page. Every page opens with
 	// an h1 that takes focus (tabindex="-1") when the controller moves to it.
-	const PAGES = { profiles: profilesPage, garage: garagePage }
+	const PAGES = { profiles: profilesPage, garage: garagePage, carForm: carFormPage }
 
 	function render(model, derived) {
 		const t = (key, vars) => i18n.t(derived.lang, key, vars)
@@ -104,11 +104,86 @@ export function createView({ header, main }, i18n, config) {
 			</form>`
 	}
 
-	// Cars arrive with #8 and #9; until then the garage says it is empty.
-	function garagePage(_model, _derived, t) {
+	// derived.cars is the active profile's cars. The list of cards comes
+	// with #9; until then the garage says when it is empty.
+	function garagePage(_model, derived, t) {
+		const empty = derived.cars.length === 0
 		return `
 			<h1 tabindex="-1">${esc(t("garage.title"))}</h1>
-			<p class="text-muted-foreground">${esc(t("garage.empty"))}</p>`
+			${empty ? `<p class="text-muted-foreground">${esc(t("garage.empty"))}</p>` : ""}
+			<div>
+				<button class="btn btn-primary" type="button" data-action="add-car">${icon("plus")}<span>${esc(t("garage.addCar"))}</span></button>
+			</div>`
+	}
+
+	// The car form's fields in form order (docs/design/data-model.md, Car).
+	// The labels of optional fields say "(optional)", so only the required
+	// ones carry the required attribute.
+	const CAR_FIELDS = [
+		{ name: "nickname", attrs: `maxlength="${config.carNicknameMax}"` },
+		{ name: "make", required: true },
+		{ name: "model", required: true },
+		{
+			name: "year",
+			type: "number",
+			required: true,
+			attrs: `inputmode="numeric" min="${config.carYearMin}" step="1"`,
+		},
+		{ name: "regNumber", required: true, attrs: 'autocapitalize="characters" spellcheck="false"' },
+		{ name: "vin", attrs: 'maxlength="17" autocapitalize="characters" spellcheck="false"' },
+		{ name: "fuel", type: "select" },
+		{ name: "engine" },
+		{
+			name: "mileage",
+			type: "number",
+			required: true,
+			attrs: 'inputmode="numeric" min="0" step="1"',
+		},
+	]
+
+	// novalidate: each error is our own text under its field, the same way
+	// as on the profile form.
+	function carFormPage(model, _derived, t) {
+		return `
+			<h1 tabindex="-1">${esc(t("carForm.title"))}</h1>
+			<form class="stack" data-submit="save-car" novalidate>
+				${CAR_FIELDS.map((field) => carField(model, t, field)).join("")}
+				<div class="cluster">
+					<button class="btn btn-primary" type="submit">${esc(t("car.save"))}</button>
+					<button class="btn" type="button" data-action="cancel-car">${esc(t("car.cancel"))}</button>
+				</div>
+			</form>`
+	}
+
+	// One labelled field. Every keystroke goes to the controller as
+	// "car-input" with the field's name, so the form needs no redraw.
+	function carField(model, t, { name, type = "text", required = false, attrs = "" }) {
+		const id = `car-${name}`
+		const value = model.inputs.car[name]
+		const error = model.inputs.errors[name]
+		const errorId = `${id}-error`
+		const shared = [
+			`id="${id}" name="${name}" data-input="car-input" data-field="${name}"`,
+			required ? "required" : "",
+			error ? `aria-invalid="true" aria-describedby="${errorId}"` : "",
+			attrs,
+		].join(" ")
+		const control =
+			type === "select"
+				? `<select class="select" ${shared}>${config.fuels
+						.map(
+							(fuel) =>
+								`<option value="${esc(fuel)}"${fuel === value ? " selected" : ""}>${esc(t(`fuel.${fuel}`))}</option>`
+						)
+						.join("")}</select>`
+				: `<input class="input" type="${type}" autocomplete="off" ${shared} value="${esc(value)}" />`
+		const vars = { max: config.carNicknameMax, min: config.carYearMin }
+		return `
+			<div class="field">
+				<label class="label" for="${id}">${esc(t(`car.${name}`))}</label>
+				${control}
+				${error ? `<p class="field-error" id="${errorId}">${esc(t(error, vars))}</p>` : ""}
+			</div>`
 	}
 
 	// One row of a picker. The label sits in one span so text around a <span lang>

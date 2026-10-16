@@ -17,6 +17,7 @@ import {
 	resolvePreferences,
 	STORAGE_KEY,
 	systemCurrency,
+	validateCar,
 	validateProfileName,
 } from "../src/controller/controller.js"
 import { bundles, FALLBACK_LANG } from "../src/locales/index.js"
@@ -140,7 +141,13 @@ afterEach(() => {
 test("first load resolves every preference from the browser when nothing is stored", () => {
 	const { model, view } = boot(fakeStorage())
 	assert.deepEqual(model.app.preferences.chosen, { lang: null, theme: null, currency: null })
-	assert.deepEqual(view.derived, { lang: "nb", theme: "dark", currency: "NOK", profile: null }) // no matchMedia: the DS default
+	assert.deepEqual(view.derived, {
+		lang: "nb",
+		theme: "dark",
+		currency: "NOK",
+		profile: null,
+		cars: [],
+	}) // no matchMedia: the DS default
 	assert.equal(globalThis.document.documentElement.lang, "nb")
 	assert.equal(globalThis.document.documentElement.dataset.theme, "dark")
 	assert.equal(globalThis.document.title, bundles.nb["app.title"])
@@ -330,6 +337,8 @@ test("loadData is null when nothing is saved, the JSON is broken or the shape is
 	assert.equal(loadFrom(variant({ cars: {} })), null)
 	assert.equal(loadFrom(variant({ profiles: [null] })), null)
 	assert.equal(loadFrom(variant({ profiles: [{ id: 1, name: "Malin" }] })), null)
+	assert.equal(loadFrom(variant({ cars: [null] })), null)
+	assert.equal(loadFrom(variant({ cars: [{ id: "c0" }] })), null) // no profileId
 })
 
 test("loadData keeps valid data and drops an active id that matches no profile", () => {
@@ -452,4 +461,185 @@ test("when setItem throws a new profile still works for the open page", () => {
 	assert.doesNotThrow(() => createProfile(view, "Malin"))
 	assert.equal(model.app.page, "garage")
 	assert.equal(view.derived.profile.name, "Malin")
+})
+
+// ---- Add a car (#8) ----
+
+// A car form filled in the way a user would, before any cleaning up.
+const TYPED = Object.freeze({
+	nickname: "  Svarten ",
+	make: " Volvo ",
+	model: "V70",
+	year: "2008",
+	regNumber: "ab 12345",
+	vin: "yv1sw58d482712345",
+	fuel: "diesel",
+	engine: "2.4 D5",
+	mileage: "184000",
+	euInspectionDue: "",
+})
+const RULES = { fuels: config.fuels, nicknameMax: 40, yearMin: 1900, yearMax: 2027 }
+
+test("validateCar cleans up a valid car: trims, capitals, numbers and null for empty", () => {
+	const { car, errors } = validateCar(TYPED, RULES)
+	assert.deepEqual(errors, {})
+	assert.deepEqual(car, {
+		nickname: "Svarten",
+		make: "Volvo",
+		model: "V70",
+		year: 2008,
+		regNumber: "AB12345",
+		vin: "YV1SW58D482712345",
+		fuel: "diesel",
+		engine: "2.4 D5",
+		mileage: 184000,
+		euInspectionDue: null,
+	})
+	const bare = validateCar({ ...TYPED, nickname: " ", vin: "", engine: "  " }, RULES).car
+	assert.equal(bare.nickname, null)
+	assert.equal(bare.vin, null)
+	assert.equal(bare.engine, null)
+})
+
+test("validateCar requires make, model and registration number", () => {
+	const { errors } = validateCar({ ...TYPED, make: " ", model: "", regNumber: "  " }, RULES)
+	assert.deepEqual(errors, {
+		make: "car.error.make",
+		model: "car.error.model",
+		regNumber: "car.error.regNumber",
+	})
+})
+
+test("validateCar takes a whole year from 1900 to next year", () => {
+	for (const year of ["1900", "2027"])
+		assert.deepEqual(validateCar({ ...TYPED, year }, RULES).errors, {})
+	for (const year of ["", "1899", "2028", "2008.5", "abc"]) {
+		assert.deepEqual(
+			validateCar({ ...TYPED, year }, RULES).errors,
+			{ year: "car.error.year" },
+			year
+		)
+	}
+})
+
+test("validateCar takes the odometer as whole km from 0", () => {
+	assert.equal(validateCar({ ...TYPED, mileage: "0" }, RULES).car.mileage, 0)
+	for (const mileage of ["", "-1", "12.5", "1e3", "abc"]) {
+		assert.deepEqual(
+			validateCar({ ...TYPED, mileage }, RULES).errors,
+			{ mileage: "car.error.mileage" },
+			mileage
+		)
+	}
+})
+
+test("validateCar takes a VIN of 17 letters and digits without I, O or Q", () => {
+	for (const vin of [
+		"YV1SW58D48271234",
+		"YV1SW58D4827123456",
+		"YV1SW58D48271234I",
+		"YV1SW58D4827-2345",
+	]) {
+		assert.deepEqual(validateCar({ ...TYPED, vin }, RULES).errors, { vin: "car.error.vin" }, vin)
+	}
+})
+
+test("validateCar caps the nickname and only takes a fuel from the list", () => {
+	const long = validateCar({ ...TYPED, nickname: "x".repeat(41) }, RULES)
+	assert.deepEqual(long.errors, { nickname: "car.error.nickname" })
+	assert.deepEqual(validateCar({ ...TYPED, nickname: "x".repeat(40) }, RULES).errors, {})
+	assert.deepEqual(validateCar({ ...TYPED, fuel: "coal" }, RULES).errors, {
+		fuel: "car.error.fuel",
+	})
+})
+
+// What the user does: type every field, then submit the car form.
+function fillCar(view, values) {
+	for (const [field, value] of Object.entries(values)) {
+		if (field !== "euInspectionDue") view.handlers["car-input"](null, { dataset: { field }, value })
+	}
+}
+
+test("Add car opens an empty car form and puts focus on its heading", () => {
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"]) }))
+	view.handlers["add-car"]()
+	assert.equal(model.app.page, "carForm")
+	assert.equal(view.headings, 1)
+	assert.deepEqual(model.inputs.car, initialModel.inputs.car)
+})
+
+test("typing into a car field updates the input without a redraw", () => {
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"]) }))
+	view.handlers["add-car"]()
+	const renders = view.renders
+	view.handlers["car-input"](null, { dataset: { field: "make" }, value: "Vol" })
+	assert.equal(model.inputs.car.make, "Vol")
+	assert.equal(view.renders, renders)
+	view.handlers["car-input"](null, { dataset: { field: "nope" }, value: "x" }) // unknown field
+	assert.equal("nope" in model.inputs.car, false)
+})
+
+test("saving a valid car adds it to the active profile, saves it and opens the garage", () => {
+	const storage = fakeStorage({ [STORAGE_KEY]: dataWith(["Malin", "Rune"], 1) })
+	const { model, view } = boot(storage)
+	view.handlers["add-car"]()
+	fillCar(view, TYPED)
+	view.handlers["save-car"]()
+	assert.equal(model.data.cars.length, 1)
+	const [car] = model.data.cars
+	assert.match(car.id, /^[0-9a-f-]{36}$/)
+	assert.equal(car.profileId, "p1")
+	assert.equal(car.regNumber, "AB12345")
+	assert.deepEqual(storedData(storage), model.data)
+	assert.equal(model.app.page, "garage")
+	assert.deepEqual(view.derived.cars, [car])
+	assert.deepEqual(model.inputs.car, initialModel.inputs.car)
+	assert.equal(view.headings, 2)
+})
+
+test("an invalid car shows its errors, saves nothing and focuses the first field with an error", () => {
+	const storage = fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"]) })
+	const { model, view } = boot(storage)
+	view.handlers["add-car"]()
+	fillCar(view, { ...TYPED, make: "", year: "1800" })
+	view.handlers["save-car"]()
+	assert.deepEqual(model.inputs.errors, { make: "car.error.make", year: "car.error.year" })
+	assert.deepEqual(model.data.cars, [])
+	assert.equal(storage.items[STORAGE_KEY], dataWith(["Malin"]))
+	assert.equal(model.app.page, "carForm")
+	assert.deepEqual(view.fields, ["car-make"])
+	assert.equal(model.inputs.car.model, "V70") // what was typed stays
+})
+
+test("Cancel returns to the garage without saving and empties the form", () => {
+	const storage = fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"]) })
+	const { model, view } = boot(storage)
+	view.handlers["add-car"]()
+	fillCar(view, { ...TYPED, make: "" })
+	view.handlers["save-car"]()
+	view.handlers["cancel-car"]()
+	assert.equal(model.app.page, "garage")
+	assert.deepEqual(model.data.cars, [])
+	assert.deepEqual(model.inputs.car, initialModel.inputs.car)
+	assert.deepEqual(model.inputs.errors, {})
+})
+
+test("the garage only hands the view the active profile's cars", () => {
+	const saved = JSON.parse(dataWith(["Malin", "Rune"], 0))
+	saved.cars = [
+		{ id: "c0", profileId: "p0", make: "Volvo" },
+		{ id: "c1", profileId: "p1", make: "Saab" },
+	]
+	const { view } = boot(fakeStorage({ [STORAGE_KEY]: JSON.stringify(saved) }))
+	assert.deepEqual(
+		view.derived.cars.map((c) => c.id),
+		["c0"]
+	)
+})
+
+test("a car can't be saved without an active profile", () => {
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"], null) }))
+	fillCar(view, TYPED)
+	view.handlers["save-car"]()
+	assert.deepEqual(model.data.cars, [])
 })

@@ -36,6 +36,7 @@ const DATA_VERSION = 1
 const LISTS = ["profiles", "cars", "serviceEntries", "tasks"]
 
 const isProfile = (p) => typeof p?.id === "string" && typeof p.name === "string"
+const isCar = (c) => typeof c?.id === "string" && typeof c.profileId === "string"
 
 // The saved data, or null when it is missing, broken or the wrong shape.
 // An active id that matches no profile is dropped, so the picker shows.
@@ -48,7 +49,7 @@ export function loadData() {
 	}
 	if (data?.version !== DATA_VERSION) return null
 	if (!LISTS.every((name) => Array.isArray(data[name]))) return null
-	if (!data.profiles.every(isProfile)) return null
+	if (!data.profiles.every(isProfile) || !data.cars.every(isCar)) return null
 	const active = data.profiles.some((p) => p.id === data.activeProfileId)
 	return {
 		version: DATA_VERSION,
@@ -75,6 +76,46 @@ export function validateProfileName(input, profiles, max) {
 	else if (name.length > max) error = "profile.error.tooLong"
 	else if (profiles.some(taken)) error = "profile.error.taken"
 	return { name, error }
+}
+
+const WHOLE_NUMBER = /^\d+$/
+// 17 letters and digits. I, O and Q are never used, so they can't be
+// mistaken for 1 and 0.
+const VIN = /^[A-HJ-NPR-Z0-9]{17}$/
+
+// The typed car form as a car to store, and an error text key per field
+// that is wrong. Errors come in form order, so the first one is the field
+// to focus. Empty optional text is stored as null, never "".
+export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax }) {
+	const optional = (value) => value.trim() || null
+	const car = {
+		nickname: optional(inputs.nickname),
+		make: inputs.make.trim(),
+		model: inputs.model.trim(),
+		year: Number(inputs.year.trim()),
+		regNumber: inputs.regNumber.replace(/\s/g, "").toUpperCase(),
+		vin: optional(inputs.vin)?.toUpperCase() ?? null,
+		fuel: inputs.fuel,
+		engine: optional(inputs.engine),
+		mileage: Number(inputs.mileage.trim()),
+		euInspectionDue: optional(inputs.euInspectionDue),
+	}
+	const valid = {
+		nickname: car.nickname === null || car.nickname.length <= nicknameMax,
+		make: car.make !== "",
+		model: car.model !== "",
+		year: WHOLE_NUMBER.test(inputs.year.trim()) && car.year >= yearMin && car.year <= yearMax,
+		regNumber: car.regNumber !== "",
+		vin: car.vin === null || VIN.test(car.vin),
+		fuel: fuels.includes(car.fuel),
+		mileage: WHOLE_NUMBER.test(inputs.mileage.trim()) && Number.isSafeInteger(car.mileage),
+	}
+	const errors = Object.fromEntries(
+		Object.keys(valid)
+			.filter((field) => !valid[field])
+			.map((field) => [field, `car.error.${field}`])
+	)
+	return { car, errors }
 }
 
 const activeProfile = ({ profiles, activeProfileId }) =>
@@ -117,6 +158,9 @@ export function readPreferences({ i18n, config, languages = navigator.languages 
 // `languages` defaults to navigator.languages; tests pass their own.
 export function createController({ model, view, i18n, config, languages }) {
 	let headerKey = null
+	// The empty forms, taken before anything is typed, so a page change can
+	// start every form afresh.
+	const blankInputs = structuredClone(model.inputs)
 
 	function init() {
 		model.app.preferences = readPreferences({ i18n, config, languages })
@@ -134,6 +178,19 @@ export function createController({ model, view, i18n, config, languages }) {
 			"create-profile": createProfile,
 			"choose-profile": (_event, target) => chooseProfile(target.dataset.id),
 			"switch-profile": () => setActiveProfile(null),
+			"add-car": () => {
+				clearInputs()
+				go("carForm")
+			},
+			"car-input": (_event, target) => {
+				const { field } = target.dataset
+				if (Object.hasOwn(model.inputs.car, field)) model.inputs.car[field] = target.value
+			},
+			"save-car": saveCar,
+			"cancel-car": () => {
+				clearInputs()
+				go("garage")
+			},
 			// actionName: (event, target) => { change model, then render() }
 		})
 
@@ -152,6 +209,7 @@ export function createController({ model, view, i18n, config, languages }) {
 		const derived = {
 			...resolvePreferences(model.app.preferences),
 			profile: activeProfile(model.data),
+			cars: model.data.cars.filter((c) => c.profileId === model.data.activeProfileId),
 		}
 		view.render(model, derived)
 		syncHeader(derived)
@@ -190,13 +248,40 @@ export function createController({ model, view, i18n, config, languages }) {
 	}
 
 	// A profile id opens its garage; null opens the picker. Either way the
-	// profile form starts empty next time.
+	// forms start empty next time.
 	function setActiveProfile(id) {
 		model.data.activeProfileId = id
 		saveData(model.data)
-		model.inputs.profile.name = ""
-		model.inputs.errors = {}
+		clearInputs()
 		go(id ? "garage" : "profiles")
+	}
+
+	function clearInputs() {
+		model.inputs = structuredClone(blankInputs)
+	}
+
+	// The car form was submitted. A car with errors stays on the form with
+	// what was typed, and focus goes to the first field with an error.
+	function saveCar() {
+		const profileId = model.data.activeProfileId
+		if (!profileId) return
+		const { car, errors } = validateCar(model.inputs.car, {
+			fuels: config.fuels,
+			nicknameMax: config.carNicknameMax,
+			yearMin: config.carYearMin,
+			yearMax: new Date().getFullYear() + 1,
+		})
+		const fields = Object.keys(errors)
+		if (fields.length > 0) {
+			model.inputs.errors = errors
+			render()
+			view.focusField(`car-${fields[0]}`)
+			return
+		}
+		model.data.cars.push({ id: crypto.randomUUID(), profileId, ...car })
+		saveData(model.data)
+		clearInputs()
+		go("garage")
 	}
 
 	// An explicit choice, or "" / null for the System row. A repeat of the
