@@ -12,15 +12,19 @@ import { afterEach, beforeEach, test } from "node:test"
 import { createTranslator } from "../i18n/index.js"
 import { config } from "../src/config.js"
 import {
+	carFormHints,
 	createController,
 	loadData,
+	resolveCountry,
 	resolvePreferences,
 	STORAGE_KEY,
+	suggestedModels,
 	systemCurrency,
 	typedCarInput,
 	validateCar,
 	validateProfileName,
 } from "../src/controller/controller.js"
+import { PLATES } from "../src/data/plates.js"
 import { bundles, FALLBACK_LANG } from "../src/locales/index.js"
 import { model as initialModel } from "../src/model/model.js"
 import { MULTI_CURRENCY } from "./fixtures.js"
@@ -56,6 +60,7 @@ function fakeView() {
 		headings: 0,
 		fields: [],
 		corrected: [],
+		carForms: [],
 		handlers: {},
 		derived: null,
 		render(_model, derived) {
@@ -67,6 +72,7 @@ function fakeView() {
 		focusHeading: () => view.headings++,
 		focusField: (id) => view.fields.push(id),
 		setFieldValue: (_input, value, caret) => view.corrected.push({ value, caret }),
+		updateCarForm: (hints) => view.carForms.push(hints),
 		bindActions: (handlers) => Object.assign(view.handlers, handlers),
 	}
 	return view
@@ -481,6 +487,7 @@ const TYPED = Object.freeze({
 	make: " Volvo ",
 	model: "V70",
 	year: "2008",
+	regCountry: "NO",
 	regNumber: "ab 12345",
 	vin: "yv1sw58d482712345",
 	fuel: "diesel",
@@ -504,6 +511,7 @@ test("validateCar cleans up a valid car: trims, capitals, numbers and null for e
 		make: "Volvo",
 		model: "V70",
 		year: 2008,
+		regCountry: "NO",
 		regNumber: "AB12345",
 		vin: "YV1SW58D482712345",
 		fuel: "diesel",
@@ -579,6 +587,44 @@ test("typedCarInput keeps digits only: four for the year, eight for the odometer
 	assert.equal(typedCarInput("fuel", "diesel"), "diesel")
 })
 
+test("validateCar takes a country with a plate rule, and a plate that fits it", () => {
+	assert.deepEqual(validateCar({ ...TYPED, regCountry: "Nor" }, RULES).errors, {
+		regCountry: "car.error.regCountry",
+	})
+	const { min, max } = PLATES.NO
+	for (const regNumber of ["A".repeat(min - 1), "A".repeat(max + 1)].filter(Boolean)) {
+		assert.deepEqual(
+			validateCar({ ...TYPED, regNumber }, RULES).errors,
+			{ regNumber: "car.error.regNumberLength" },
+			regNumber
+		)
+	}
+	assert.equal(validateCar({ ...TYPED, regNumber: "ab-12 345" }, RULES).car.regNumber, "AB12345")
+})
+
+test("typedCarInput keeps a plate to its country's characters and length, separators aside", () => {
+	const { max } = PLATES.NO
+	assert.equal(typedCarInput("regNumber", "ab-12 345!", "NO"), "AB-12 345")
+	const long = typedCarInput("regNumber", "1".repeat(max + 3), "NO")
+	assert.equal(long, "1".repeat(max))
+	assert.equal(typedCarInput("regNumber", "ab 12", null), "AB 12") // no country yet
+})
+
+test("resolveCountry matches a code or a name in the language or English, in any case", () => {
+	assert.equal(resolveCountry("norway", "en"), "NO")
+	assert.equal(resolveCountry("Norge", "nb"), "NO")
+	assert.equal(resolveCountry("Sweden", "nb"), "SE")
+	assert.equal(resolveCountry("se", "en"), "SE")
+	assert.equal(resolveCountry("Nor", "en"), null)
+})
+
+test("suggestedModels finds a make without case, and nothing for an unknown one", () => {
+	assert.ok(suggestedModels(" mercedes-benz ").includes("C63 AMG"))
+	assert.deepEqual(suggestedModels("Trabant 601"), [])
+	assert.equal(carFormHints({ make: "", regCountry: "NO" }, "en").plate.example, PLATES.NO.example)
+	assert.equal(carFormHints({ make: "", regCountry: "x" }, "en").plate, null)
+})
+
 test("validateCar takes a VIN of 17 letters and digits without I, O or Q", () => {
 	for (const vin of [
 		"YV1SW58D48271234",
@@ -637,6 +683,23 @@ test("a typed character a field can't hold is fixed in place, with the caret kep
 	})
 	assert.equal(model.inputs.car.year, "2015")
 	assert.deepEqual(view.corrected, [{ value: "2015", caret: 2 }])
+})
+
+test("a typed make or country updates the model suggestions and plate example in place", () => {
+	const { model, view } = boot(fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"]) }))
+	view.handlers["add-car"]()
+	const renders = view.renders
+	view.handlers["car-input"](null, { dataset: { field: "make" }, value: "Mercedes-Benz" })
+	assert.ok(view.carForms.at(-1).models.includes("C63 AMG"))
+	view.handlers["car-input"](null, { dataset: { field: "regCountry" }, value: "Swe" })
+	assert.equal(model.inputs.car.regCountry, "Swe")
+	assert.equal(view.carForms.at(-1).plate, null)
+	view.handlers["car-input"](null, { dataset: { field: "regCountry" }, value: "Sweden" })
+	assert.equal(model.inputs.car.regCountry, "SE")
+	assert.equal(view.carForms.at(-1).plate.example, PLATES.SE.example)
+	view.handlers["car-input"](null, { dataset: { field: "year" }, value: "2015" })
+	assert.equal(view.carForms.length, 3) // other fields leave the hints alone
+	assert.equal(view.renders, renders)
 })
 
 test("saving a valid car adds it to the active profile, saves it and opens the garage", () => {
