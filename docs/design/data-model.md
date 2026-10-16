@@ -85,15 +85,15 @@ A local profile that keeps one person's cars apart from another's on a shared de
 |---|---|---|
 | `id` | string | From `crypto.randomUUID()` |
 | `profileId` | string | The profile that owns the car |
-| `nickname` | string or null | Optional, trimmed, at most 40 characters. When it is set it is the car's title, with make and model under it |
-| `make` | string | Required, e.g. "Volvo" |
-| `model` | string | Required, e.g. "V70" |
+| `nickname` | string or null | Optional, trimmed, at most 40 characters, first letter in capitals. When it is set it is the car's title, with make and model under it |
+| `make` | string | Required, e.g. "Mercedes-Benz". Kept as typed. The form suggests a list of makes, but any make can be typed |
+| `model` | string | Required, e.g. "C63 AMG". Kept as typed, so "e-tron" and "iX" stay right |
 | `year` | number | 1900 to next year |
 | `regNumber` | string | Required. Saved in capitals without spaces ("ab 12345" becomes "AB12345") |
 | `vin` | string or null | Optional. 17 characters, saved in capitals, letters and digits only, never I, O or Q. Shown beside the registration number when it is set |
 | `fuel` | string | One of `petrol`, `diesel`, `electric`, `hybrid`, `other` |
-| `engine` | string or null | Optional free text, e.g. "2.0 D4" |
-| `mileage` | number | Whole km from 0. See [Mileage](#mileage) |
+| `engine` | string or null | Optional free text, first letter in capitals, e.g. "4.0 V8" |
+| `mileage` | number | Whole km from 0 to 10 000 000. See [Mileage](#mileage) |
 | `euInspectionDue` | string or null | Date of the next EU inspection (EU-kontroll) |
 
 ### Service entry
@@ -189,6 +189,18 @@ export const model = {
 - Optional fields are `null` when empty, never `""`.
 
 ## Rules the controller keeps
+
+### Typing in the car form
+
+The controller fixes each car field as it is typed, so the user sees the rule at once. The caret stays where it was.
+
+| Field | While typing |
+|---|---|
+| `nickname`, `engine` | First letter in capitals |
+| `regNumber`, `vin` | Capitals |
+| `year` | Digits only, at most 4 |
+| `mileage` | Digits only, at most 8 |
+| `make`, `model` | Kept as typed |
 
 ### Mileage
 
