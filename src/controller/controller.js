@@ -303,12 +303,14 @@ export function createController({ model, view, i18n, config, languages }) {
 				event.preventDefault()
 				openCar(target.dataset.id)
 			},
+			"back-garage": backToGarage,
 			"cancel-car": () => {
 				clearInputs()
 				go("garage")
 			},
 			// actionName: (event, target) => { change model, then render() }
 		})
+		globalThis.addEventListener?.("popstate", handlePopState)
 
 		// While no theme key is stored the page follows the OS. Another tab
 		// changing or clearing the key is applied here too. Both go through
@@ -327,6 +329,7 @@ export function createController({ model, view, i18n, config, languages }) {
 			profile: activeProfile(model.data),
 			cars: model.data.cars.filter((c) => c.profileId === model.data.activeProfileId),
 		}
+		derived.selectedCar = derived.cars.find((car) => car.id === model.app.selectedCarId) ?? null
 		if (model.app.page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		view.render(model, derived)
 		syncHeader(derived)
@@ -414,15 +417,43 @@ export function createController({ model, view, i18n, config, languages }) {
 		go("garage")
 	}
 
-	// A car card was clicked. Only the active profile's own cars can be
-	// selected.
-	// deferred: no car page yet, so nothing changes on screen. The car
-	// detail story in Sprint 2 adds the page and calls go("car") here.
-	function openCar(id) {
+	// A car card opens its detail page. Only the active profile's own cars
+	// can be selected; a history entry lets the browser back button return.
+	function openCar(id, { pushHistory = true } = {}) {
 		const own = model.data.cars.some(
 			(c) => c.id === id && c.profileId === model.data.activeProfileId
 		)
-		if (own) model.app.selectedCarId = id
+		if (!own) return
+		model.app.selectedCarId = id
+		if (pushHistory && globalThis.history?.pushState) {
+			globalThis.history.pushState(
+				{ ...(globalThis.history.state ?? {}), motorCatalogPage: "car", carId: id },
+				"",
+				`#car-${id}`
+			)
+		}
+		go("car")
+	}
+
+	function backToGarage() {
+		if (globalThis.history?.state?.motorCatalogPage === "car") {
+			globalThis.history.back()
+			return
+		}
+		model.app.selectedCarId = null
+		go("garage")
+	}
+
+	function handlePopState(event) {
+		const entry = event.state
+		if (entry?.motorCatalogPage === "car") {
+			openCar(entry.carId, { pushHistory: false })
+			return
+		}
+		if (model.app.page === "car") {
+			model.app.selectedCarId = null
+			go("garage")
+		}
 	}
 
 	// An explicit choice, or "" / null for the System row. A repeat of the

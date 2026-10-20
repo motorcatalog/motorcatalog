@@ -56,7 +56,7 @@ export function createView({ header, main }, i18n, config) {
 
 	// One function per page, picked by model.app.page. Every page opens with
 	// an h1 that takes focus (tabindex="-1") when the controller moves to it.
-	const PAGES = { profiles: profilesPage, garage: garagePage, carForm: carFormPage }
+	const PAGES = { profiles: profilesPage, garage: garagePage, carForm: carFormPage, car: carPage }
 
 	// The last render's translator, for updates made without a redraw.
 	let translate = (key) => key
@@ -124,6 +124,81 @@ export function createView({ header, main }, i18n, config) {
 					? `<p class="garage-empty text-muted-foreground">${esc(t("garage.empty"))}</p>`
 					: `<ul class="car-list" role="list">${cars.map((car) => carCard(car, t, km)).join("")}</ul>`
 			}`
+	}
+
+	// The detail view reads the selected car from derived state. The header is
+	// outside #main, so the shared banner and profile controls remain visible.
+	function carPage(_model, derived, t) {
+		const car = derived.selectedCar
+		if (!car) {
+			return `
+				<button class="btn btn-ghost" type="button" data-action="back-garage">${backIcon()}<span>${esc(t("car.backToGarage"))}</span></button>
+				<h1 tabindex="-1">${esc(t("car.notFound"))}</h1>`
+		}
+		const title = car.nickname ?? `${car.make} ${car.model}`
+		const km = new Intl.NumberFormat(derived.lang).format(car.mileage)
+		const inspection = car.euInspectionDue
+			? formatDate(car.euInspectionDue, derived.lang)
+			: t("car.noInspectionDate")
+		const fact = (label, value) => `<div><dt>${esc(t(label))}</dt><dd>${esc(value)}</dd></div>`
+		const quickFacts = [
+			["car.year", String(car.year)],
+			["car.fuel", t(`fuel.${car.fuel}`)],
+			["car.detail.regNumber", car.regNumber],
+			...(car.vin ? [["car.detail.vin", car.vin]] : []),
+			...(car.engine ? [["car.detail.engine", car.engine]] : []),
+		]
+		return `
+			<button class="btn btn-ghost car-back" type="button" data-action="back-garage">${backIcon()}<span>${esc(t("car.backToGarage"))}</span></button>
+			<section class="car-detail-hero" aria-labelledby="car-detail-title">
+				<div class="car-detail-art" aria-hidden="true">${vehicleIcon()}</div>
+				<div class="car-detail-heading">
+					<h1 id="car-detail-title" class="${car.nickname ? "car-detail-title-nickname" : ""}" tabindex="-1">${esc(title)}</h1>
+					${car.nickname ? `<p class="car-detail-subtitle">${esc(`${car.make} ${car.model}`)}</p>` : ""}
+				</div>
+			</section>
+			<dl class="car-detail-quick-facts">
+				${quickFacts.map(([label, value]) => fact(label, value)).join("")}
+			</dl>
+			<div class="car-detail-stats">
+				<section class="card car-stat-card" aria-label="${esc(t("car.odometer"))}">
+					${meterIcon()}
+					<div class="stat"><span class="stat-label">${esc(t("car.odometer"))}</span><span class="stat-value">${esc(km)}</span><span class="car-stat-unit">${esc(t("car.kilometres"))}</span></div>
+				</section>
+				<section class="card car-stat-card" aria-label="${esc(t("car.euInspection"))}">
+					${icon("calendar")}
+					<div class="stat"><span class="stat-label">${esc(t("car.euInspection"))}</span><span class="stat-value car-inspection-value">${esc(inspection)}</span></div>
+				</section>
+			</div>
+			<div class="car-future-cards">
+				<div class="card car-future-card">
+					${icon("calendar")}<span class="car-future-copy"><strong>${esc(t("car.serviceRecords"))}</strong><span>${esc(t("car.comingSoon"))}</span></span>
+				</div>
+				<div class="card car-future-card">
+					${icon("check")}<span class="car-future-copy"><strong>${esc(t("car.maintenance"))}</strong><span>${esc(t("car.comingSoon"))}</span></span>
+				</div>
+			</div>`
+	}
+
+	function formatDate(value, lang) {
+		const date = new Date(`${value}T00:00:00`)
+		return Number.isNaN(date.getTime())
+			? value
+			: new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", year: "numeric" }).format(
+					date
+				)
+	}
+
+	function backIcon() {
+		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>'
+	}
+
+	function meterIcon() {
+		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4.7 18a9 9 0 1 1 14.6 0"/><path d="m12 13 4-4M6.5 18h11"/><circle cx="12" cy="13" r="1"/></svg>'
+	}
+
+	function vehicleIcon() {
+		return '<svg class="icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 11 1.6-4.1A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.4L19 11l1.5 1.4v5.1h-17v-5.1L5 11Z"/><path d="M4 11h16M7 17.5v1.5m10-1.5v1.5"/><circle cx="7.5" cy="14.5" r=".8"/><circle cx="16.5" cy="14.5" r=".8"/></svg>'
 	}
 
 	// One car. The title is the card's only link, and main.css stretches it
