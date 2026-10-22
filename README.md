@@ -9,11 +9,16 @@ A digital service book for your car: log maintenance, repairs and costs, and kee
 
 ## Features
 
-The first version will cover:
+Implemented so far:
 
 - **Local profiles:** create a profile on this device and keep each person's cars apart.
-- **Garage:** add one or more vehicles with make, model, year and registration number.
-- **Service log:** record every service and repair with date, mileage, workshop, work done and price.
+- **Garage and car details:** add cars, then open a car to see its make, model, year, fuel, registration number, VIN, odometer and EU inspection date.
+- **Service history:** view a car's service, repair and other records newest first, and filter by category.
+- **Register service:** record the category, work, date, odometer, cost, and optional workshop and notes. The car's odometer updates when a new record has a higher reading.
+- **Cost total:** see the total spent on a car's service records from its details or service history.
+
+Planned for the first version:
+
 - **Reminders:** see when the next service, EU inspection or tyre change is due, by date or by mileage.
 - **Cost overview:** see what each car has cost per year and per category.
 - **Export:** download your data as a file to keep a backup or move it to another device.
@@ -103,7 +108,7 @@ Headings (`h1` to `h4`) already use Fraunces. Colours and contrast rules: [`docs
 
 ## Status
 
-Sprint 1: profiles, adding a car and the garage list work.
+Profiles, the garage, car details, service history and service entry registration are implemented.
 
 ## License
 
