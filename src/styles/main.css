@@ -251,6 +251,19 @@ main h1[tabindex="-1"]:focus {
 	gap: var(--space-3);
 	padding: var(--space-3);
 }
+.car-future-link {
+	color: inherit;
+	text-decoration: none;
+}
+.car-future-link:hover {
+	background: var(--elevated-bg);
+	border-color: var(--border-strong);
+}
+.car-future-link:focus-visible {
+	outline: 2px solid var(--accent-strong);
+	outline-offset: 2px;
+	box-shadow: var(--shadow-focus);
+}
 .car-future-copy {
 	min-width: 0;
 	display: grid;
@@ -263,4 +276,80 @@ main h1[tabindex="-1"]:focus {
 .car-future-copy > span {
 	color: var(--text-muted);
 	font-size: var(--text-sm);
+}
+
+.history-title {
+	color: var(--accent);
+}
+.history-intro {
+	margin-top: var(--space-2);
+}
+.history-controls {
+	display: grid;
+	gap: var(--space-3);
+	margin-block: var(--space-4);
+}
+.history-filter-field {
+	min-width: 0;
+}
+.history-register {
+	width: 100%;
+}
+.history-list {
+	list-style: none;
+	padding: 0;
+}
+.history-entry {
+	display: grid;
+	grid-template-columns: minmax(3.25rem, auto) minmax(0, 1fr);
+	gap: var(--space-3);
+	padding-block: var(--space-4);
+	border-top: 1px solid var(--line);
+}
+.history-date {
+	padding-top: var(--space-1);
+	color: var(--text);
+	font-size: var(--text-sm);
+	font-variant-numeric: tabular-nums;
+}
+.history-entry-details {
+	min-width: 0;
+	display: grid;
+	gap: var(--space-2);
+}
+.history-entry-heading {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+}
+.history-entry-heading h2 {
+	font-size: var(--text-lg);
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+.history-category {
+	min-height: 1.5rem;
+	padding-inline: var(--space-2);
+	font-size: var(--text-xs);
+}
+.history-entry-mileage,
+.history-entry-workshop,
+.history-entry-cost {
+	font-size: var(--text-sm);
+	font-variant-numeric: tabular-nums;
+}
+.history-empty {
+	padding-block: var(--space-5);
+	border-top: 1px solid var(--line);
+}
+
+@media (min-width: 768px) {
+	.history-controls {
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: end;
+	}
+	.history-register {
+		width: auto;
+	}
 }
