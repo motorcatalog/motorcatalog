@@ -156,6 +156,7 @@ test("first load resolves every preference from the browser when nothing is stor
 		currency: "NOK",
 		profile: null,
 		cars: [],
+		selectedCar: null,
 	}) // no matchMedia: the DS default
 	assert.equal(globalThis.document.documentElement.lang, "nb")
 	assert.equal(globalThis.document.documentElement.dataset.theme, "dark")

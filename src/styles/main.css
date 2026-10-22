@@ -131,3 +131,136 @@ main h1[tabindex="-1"]:focus {
 	font-variant-numeric: tabular-nums;
 	overflow-wrap: anywhere;
 }
+
+/* Car details: the shared header remains above #main while the selected car
+   gets a compact hero, readable facts and the design-system stat cards. */
+.car-back {
+	align-self: start;
+	margin-inline: calc(-1 * var(--space-2));
+}
+.car-detail-hero {
+	position: relative;
+	isolation: isolate;
+	min-height: 15rem;
+	display: flex;
+	align-items: end;
+	overflow: hidden;
+	padding: var(--space-5);
+	background: linear-gradient(135deg, var(--panel-bg), var(--surface-2));
+	border: 1px solid var(--border-soft);
+	border-radius: var(--radius-md);
+}
+.car-detail-hero::after {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	background: linear-gradient(0deg, var(--panel-bg), transparent 75%);
+	content: "";
+}
+.car-detail-art {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	display: grid;
+	place-items: center end;
+	padding: var(--space-4) var(--space-6);
+	color: var(--accent);
+	opacity: 0.2;
+	pointer-events: none;
+}
+.car-detail-art .icon {
+	width: clamp(12rem, 38vw, 23rem);
+	height: auto;
+}
+.car-detail-heading h1 {
+	position: relative;
+	z-index: 2;
+	font-size: var(--text-3xl);
+	color: var(--text);
+	overflow-wrap: anywhere;
+}
+.car-detail-heading .car-detail-title-nickname {
+	color: var(--accent);
+}
+.car-detail-subtitle {
+	position: relative;
+	z-index: 2;
+	margin-top: var(--space-1);
+	color: var(--text);
+}
+.car-detail-quick-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr));
+	gap: var(--space-2) var(--space-3);
+	padding-block: var(--space-3);
+	border-bottom: 1px solid var(--line);
+}
+.car-detail-quick-facts dt {
+	color: var(--text-muted);
+	font-size: var(--text-xs);
+}
+.car-detail-quick-facts dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+	font-variant-numeric: tabular-nums;
+}
+.car-detail-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+	gap: var(--space-3);
+}
+.car-stat-card {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-3);
+}
+.car-stat-card .stat {
+	gap: var(--space-1);
+}
+.car-stat-card .stat-value {
+	font-size: var(--text-2xl);
+	font-variant-numeric: tabular-nums;
+}
+.car-stat-card .stat-label {
+	color: var(--accent);
+	font-size: var(--text-lg);
+	font-weight: 600;
+}
+.car-stat-unit {
+	color: var(--text-muted);
+	font-size: var(--text-sm);
+}
+.car-inspection-value {
+	font-family: var(--font-sans);
+	font-weight: 600;
+	line-height: var(--leading-snug);
+}
+
+.car-future-cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+	gap: var(--space-3);
+}
+.car-future-card {
+	min-height: 5.5rem;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-3);
+}
+.car-future-copy {
+	min-width: 0;
+	display: grid;
+	gap: var(--space-1);
+}
+.car-future-copy strong {
+	color: var(--accent);
+	font-size: var(--text-lg);
+}
+.car-future-copy > span {
+	color: var(--text-muted);
+	font-size: var(--text-sm);
+}
