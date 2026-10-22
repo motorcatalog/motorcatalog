@@ -77,7 +77,7 @@
 	"service.error.dateInvalid": "Velg en gyldig dato.",
 	"service.error.dateFuture": "Datoen kan ikke være i fremtiden.",
 	"service.error.mileage": "Skriv inn en hel kilometerstand på 0 km eller mer.",
-	"service.error.cost": "Skriv inn en hel kostnad på 0 kr eller mer.",
+	"service.error.cost": "Skriv inn en hel kostnad på 0 eller mer.",
 	"carForm.title": "Legg til bil",
 	"car.nickname": "Kallenavn (valgfritt)",
 	"car.make": "Merke",
