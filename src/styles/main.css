@@ -277,12 +277,28 @@ main h1[tabindex="-1"]:focus {
 	color: var(--text-muted);
 	font-size: var(--text-sm);
 }
+.car-future-copy > span:last-child {
+	font-variant-numeric: tabular-nums;
+}
 
 .history-title {
 	color: var(--accent);
 }
 .history-intro {
 	margin-top: var(--space-2);
+}
+.history-total {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: var(--space-3);
+	margin-top: var(--space-4);
+	padding: var(--space-3);
+	font-variant-numeric: tabular-nums;
+}
+.history-total strong {
+	color: var(--accent);
+	font-size: var(--text-lg);
 }
 .history-controls {
 	display: grid;
@@ -342,6 +358,21 @@ main h1[tabindex="-1"]:focus {
 .history-empty {
 	padding-block: var(--space-5);
 	border-top: 1px solid var(--line);
+}
+
+.service-form-title {
+	color: var(--accent);
+}
+.service-form-car {
+	margin-top: var(--space-2);
+	padding-bottom: var(--space-4);
+	border-bottom: 1px solid var(--line);
+}
+.service-form {
+	margin-top: var(--space-4);
+}
+.service-form-actions {
+	margin-top: var(--space-2);
 }
 
 @media (min-width: 768px) {
