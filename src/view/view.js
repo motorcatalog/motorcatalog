@@ -56,7 +56,13 @@ export function createView({ header, main }, i18n, config) {
 
 	// One function per page, picked by model.app.page. Every page opens with
 	// an h1 that takes focus (tabindex="-1") when the controller moves to it.
-	const PAGES = { profiles: profilesPage, garage: garagePage, carForm: carFormPage, car: carPage }
+	const PAGES = {
+		profiles: profilesPage,
+		garage: garagePage,
+		carForm: carFormPage,
+		car: carPage,
+		history: serviceHistoryPage,
+	}
 
 	// The last render's translator, for updates made without a redraw.
 	let translate = (key) => key
@@ -171,13 +177,75 @@ export function createView({ header, main }, i18n, config) {
 				</section>
 			</div>
 			<div class="car-future-cards">
-				<div class="card car-future-card">
-					${icon("calendar")}<span class="car-future-copy"><strong>${esc(t("car.serviceRecords"))}</strong><span>${esc(t("car.comingSoon"))}</span></span>
-				</div>
+				<a class="card car-future-card car-future-link" href="#history-${esc(car.id)}" data-action="open-history" data-id="${esc(car.id)}">
+					${icon("calendar")}<span class="car-future-copy"><strong>${esc(t("car.serviceRecords"))}</strong><span>${esc(t("car.openServiceRecords"))}</span></span>
+				</a>
 				<div class="card car-future-card">
 					${icon("check")}<span class="car-future-copy"><strong>${esc(t("car.maintenance"))}</strong><span>${esc(t("car.comingSoon"))}</span></span>
 				</div>
 			</div>`
+	}
+
+	function serviceHistoryPage(_model, derived, t) {
+		const car = derived.selectedCar
+		if (!car) {
+			return `
+				<button class="btn btn-ghost car-back" type="button" data-action="back-garage">${backIcon()}<span>${esc(t("car.backToGarage"))}</span></button>
+				<h1 tabindex="-1">${esc(t("car.notFound"))}</h1>`
+		}
+		const title = car.nickname ?? `${car.make} ${car.model}`
+		const filters = ["all", "service", "repair", "other"]
+		const entries = derived.history.map((entry) => serviceHistoryEntry(entry, derived, t)).join("")
+		const emptyMessage = derived.hasHistoryEntries ? t("history.noMatches") : t("history.empty")
+		return `
+			<button class="btn btn-ghost car-back" type="button" data-action="back-car">${backIcon()}<span>${esc(t("history.backToCar", { car: title }))}</span></button>
+			<h1 class="history-title" tabindex="-1">${esc(t("history.title"))}</h1>
+			<p class="history-intro text-muted-foreground">${esc(t("history.intro"))}</p>
+			<div class="history-controls">
+				<div class="field history-filter-field">
+					<label class="sr-only" for="history-filter">${esc(t("history.filter.label"))}</label>
+					<select class="select" id="history-filter" name="filter" data-change="history-filter">
+						${filters.map((filter) => `<option value="${filter}"${_model.app.historyFilter === filter ? " selected" : ""}>${esc(t(`history.filter.${filter}`))}</option>`).join("")}
+					</select>
+				</div>
+				<button class="btn btn-primary history-register" type="button">${icon("plus")}<span>${esc(t("history.register"))}</span></button>
+			</div>
+			${
+				derived.history.length
+					? `<ul class="history-list" role="list">${entries}</ul>`
+					: `<p class="history-empty text-muted-foreground" role="status">${esc(emptyMessage)}</p>`
+			}`
+	}
+
+	function serviceHistoryEntry(entry, derived, t) {
+		const km = new Intl.NumberFormat(derived.lang).format(entry.mileage)
+		const cost = new Intl.NumberFormat(derived.lang, {
+			style: "currency",
+			currency: derived.currency,
+			maximumFractionDigits: 0,
+		}).format(entry.cost)
+		return `
+			<li class="history-entry">
+				<time class="history-date" datetime="${esc(entry.date)}">${esc(formatHistoryDate(entry.date, derived.lang))}</time>
+				<div class="history-entry-details">
+					<div class="history-entry-heading">
+						<h2>${esc(entry.title)}</h2>
+						<span class="badge history-category">${esc(t(`history.filter.${entry.category}`))}</span>
+					</div>
+					<p class="history-entry-mileage">${esc(t("history.km", { km }))}</p>
+					${entry.workshop ? `<p class="history-entry-workshop">${esc(t("history.workshop", { workshop: entry.workshop }))}</p>` : ""}
+					<p class="history-entry-cost">${esc(t("history.cost", { cost }))}</p>
+				</div>
+			</li>`
+	}
+
+	function formatHistoryDate(value, lang) {
+		const date = new Date(`${value}T00:00:00`)
+		return Number.isNaN(date.getTime())
+			? value
+			: new Intl.DateTimeFormat(lang, { day: "2-digit", month: "2-digit", year: "numeric" }).format(
+					date
+				)
 	}
 
 	function formatDate(value, lang) {
@@ -505,7 +573,7 @@ export function createView({ header, main }, i18n, config) {
 	//   <form data-submit="x">    submit (the page never reloads)
 	//   <input data-input="x">    every keystroke
 	// handlers = { name: (event, target) => {} }
-	const EVENTS = { click: "action", submit: "submit", input: "input" }
+	const EVENTS = { click: "action", submit: "submit", input: "input", change: "change" }
 
 	function bindActions(handlers) {
 		for (const root of [header, main]) {

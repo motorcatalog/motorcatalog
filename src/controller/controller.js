@@ -303,7 +303,13 @@ export function createController({ model, view, i18n, config, languages }) {
 				event.preventDefault()
 				openCar(target.dataset.id)
 			},
+			"open-history": (event, target) => {
+				event.preventDefault()
+				openHistory(target.dataset.id)
+			},
 			"back-garage": backToGarage,
+			"back-car": backToCar,
+			"history-filter": (_event, target) => setHistoryFilter(target.value),
 			"cancel-car": () => {
 				clearInputs()
 				go("garage")
@@ -330,6 +336,17 @@ export function createController({ model, view, i18n, config, languages }) {
 			cars: model.data.cars.filter((c) => c.profileId === model.data.activeProfileId),
 		}
 		derived.selectedCar = derived.cars.find((car) => car.id === model.app.selectedCarId) ?? null
+		if (model.app.page === "history") {
+			const carHistory = model.data.serviceEntries.filter(
+				(entry) => entry.carId === model.app.selectedCarId
+			)
+			derived.hasHistoryEntries = carHistory.length > 0
+			derived.history = carHistory
+				.filter(
+					(entry) => model.app.historyFilter === "all" || entry.category === model.app.historyFilter
+				)
+				.sort((a, b) => b.date.localeCompare(a.date))
+		}
 		if (model.app.page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		view.render(model, derived)
 		syncHeader(derived)
@@ -444,11 +461,58 @@ export function createController({ model, view, i18n, config, languages }) {
 		go("garage")
 	}
 
+	function openHistory(id, { pushHistory = true } = {}) {
+		const car = model.data.cars.find(
+			(candidate) => candidate.id === id && candidate.profileId === model.data.activeProfileId
+		)
+		if (!car) return
+		model.app.selectedCarId = id
+		if (pushHistory && globalThis.history?.pushState) {
+			globalThis.history.pushState(
+				{ ...(globalThis.history.state ?? {}), motorCatalogPage: "history", carId: id },
+				"",
+				`#history-${id}`
+			)
+		}
+		go("history")
+	}
+
+	function backToCar() {
+		if (globalThis.history?.state?.motorCatalogPage === "history") {
+			globalThis.history.back()
+			return
+		}
+		if (model.data.cars.some((car) => car.id === model.app.selectedCarId)) {
+			go("car")
+			return
+		}
+		model.app.selectedCarId = null
+		go("garage")
+	}
+
+	function setHistoryFilter(filter) {
+		if (!["all", "service", "repair", "other"].includes(filter)) return
+		if (model.app.historyFilter === filter) return
+		model.app.historyFilter = filter
+		render()
+		view.focusField("history-filter")
+	}
+
 	function handlePopState(event) {
 		const entry = event.state
+		if (entry?.motorCatalogPage === "history") {
+			openHistory(entry.carId, { pushHistory: false })
+			return
+		}
 		if (entry?.motorCatalogPage === "car") {
 			openCar(entry.carId, { pushHistory: false })
 			return
+		}
+		if (model.app.page === "history") {
+			if (model.data.cars.some((car) => car.id === model.app.selectedCarId)) {
+				go("car")
+				return
+			}
 		}
 		if (model.app.page === "car") {
 			model.app.selectedCarId = null
