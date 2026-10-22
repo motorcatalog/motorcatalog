@@ -54,6 +54,10 @@ export function createView({ header, main }, i18n, config) {
 		return new Intl.DisplayNames([lang], { type: "currency" }).of(code) || code
 	}
 
+	function formatKr(amount, derived) {
+		return `${new Intl.NumberFormat(derived.lang).format(amount)} kr`
+	}
+
 	// One function per page, picked by model.app.page. Every page opens with
 	// an h1 that takes focus (tabindex="-1") when the controller moves to it.
 	const PAGES = {
@@ -62,6 +66,7 @@ export function createView({ header, main }, i18n, config) {
 		carForm: carFormPage,
 		car: carPage,
 		history: serviceHistoryPage,
+		serviceForm: serviceFormPage,
 	}
 
 	// The last render's translator, for updates made without a redraw.
@@ -143,8 +148,9 @@ export function createView({ header, main }, i18n, config) {
 		}
 		const title = car.nickname ?? `${car.make} ${car.model}`
 		const km = new Intl.NumberFormat(derived.lang).format(car.mileage)
+		const totalServiceCost = formatKr(derived.totalServiceCost, derived)
 		const inspection = car.euInspectionDue
-			? formatDate(car.euInspectionDue, derived.lang)
+			? formatNorwegianDate(car.euInspectionDue)
 			: t("car.noInspectionDate")
 		const fact = (label, value) => `<div><dt>${esc(t(label))}</dt><dd>${esc(value)}</dd></div>`
 		const quickFacts = [
@@ -178,7 +184,7 @@ export function createView({ header, main }, i18n, config) {
 			</div>
 			<div class="car-future-cards">
 				<a class="card car-future-card car-future-link" href="#history-${esc(car.id)}" data-action="open-history" data-id="${esc(car.id)}">
-					${icon("calendar")}<span class="car-future-copy"><strong>${esc(t("car.serviceRecords"))}</strong><span>${esc(t("car.openServiceRecords"))}</span></span>
+					${icon("calendar")}<span class="car-future-copy"><strong>${esc(t("car.serviceRecords"))}</strong><span>${esc(t("car.totalSpent", { cost: totalServiceCost }))}</span></span>
 				</a>
 				<div class="card car-future-card">
 					${icon("check")}<span class="car-future-copy"><strong>${esc(t("car.maintenance"))}</strong><span>${esc(t("car.comingSoon"))}</span></span>
@@ -194,13 +200,15 @@ export function createView({ header, main }, i18n, config) {
 				<h1 tabindex="-1">${esc(t("car.notFound"))}</h1>`
 		}
 		const title = car.nickname ?? `${car.make} ${car.model}`
-		const filters = ["all", "service", "repair", "other"]
+		const totalServiceCost = formatKr(derived.totalServiceCost, derived)
+		const filters = ["all", ...config.serviceCategories]
 		const entries = derived.history.map((entry) => serviceHistoryEntry(entry, derived, t)).join("")
 		const emptyMessage = derived.hasHistoryEntries ? t("history.noMatches") : t("history.empty")
 		return `
 			<button class="btn btn-ghost car-back" type="button" data-action="back-car">${backIcon()}<span>${esc(t("history.backToCar", { car: title }))}</span></button>
 			<h1 class="history-title" tabindex="-1">${esc(t("history.title"))}</h1>
 			<p class="history-intro text-muted-foreground">${esc(t("history.intro"))}</p>
+			<p class="card history-total"><span>${esc(t("history.totalSpent"))}</span><strong>${esc(totalServiceCost)}</strong></p>
 			<div class="history-controls">
 				<div class="field history-filter-field">
 					<label class="sr-only" for="history-filter">${esc(t("history.filter.label"))}</label>
@@ -208,7 +216,7 @@ export function createView({ header, main }, i18n, config) {
 						${filters.map((filter) => `<option value="${filter}"${_model.app.historyFilter === filter ? " selected" : ""}>${esc(t(`history.filter.${filter}`))}</option>`).join("")}
 					</select>
 				</div>
-				<button class="btn btn-primary history-register" type="button">${icon("plus")}<span>${esc(t("history.register"))}</span></button>
+				<button class="btn btn-primary history-register" type="button" data-action="register-service">${icon("plus")}<span>${esc(t("history.register"))}</span></button>
 			</div>
 			${
 				derived.history.length
@@ -217,16 +225,83 @@ export function createView({ header, main }, i18n, config) {
 			}`
 	}
 
+	function serviceFormPage(model, derived, t) {
+		const car = derived.selectedCar
+		if (!car) {
+			return `
+				<button class="btn btn-ghost car-back" type="button" data-action="back-garage">${backIcon()}<span>${esc(t("car.backToGarage"))}</span></button>
+				<h1 tabindex="-1">${esc(t("car.notFound"))}</h1>`
+		}
+		const makeModel = `${car.make} ${car.model}`
+		const carName = car.nickname ? `${car.nickname} · ${makeModel}` : makeModel
+		return `
+			<button class="btn btn-ghost car-back" type="button" data-action="cancel-service-entry">${backIcon()}<span>${esc(t("service.backToHistory"))}</span></button>
+			<h1 class="service-form-title" tabindex="-1">${esc(t("service.formTitle"))}</h1>
+			<p class="service-form-car text-muted-foreground">${esc(t("service.carSummary", { car: carName, year: car.year }))}</p>
+			<form class="stack service-form" data-submit="save-service-entry" novalidate>
+				${serviceEntryField(model, t, "category", { type: "select", required: true })}
+				${serviceEntryField(model, t, "title", {
+					required: true,
+					attrs: `placeholder="${esc(t("service.placeholder.title"))}" autocomplete="off"`,
+				})}
+				${serviceEntryField(model, t, "date", {
+					type: "date",
+					required: true,
+					attrs: `lang="nb-NO" max="${esc(derived.today)}"`,
+				})}
+				${serviceEntryField(model, t, "mileage", {
+					type: "number",
+					required: true,
+					attrs: 'min="0" step="1" inputmode="numeric"',
+				})}
+				${serviceEntryField(model, t, "cost", {
+					type: "number",
+					required: true,
+					attrs: 'min="0" step="1" inputmode="numeric"',
+				})}
+				${serviceEntryField(model, t, "workshop", {
+					attrs: `placeholder="${esc(t("service.placeholder.workshop"))}" autocomplete="organization"`,
+				})}
+				${serviceEntryField(model, t, "notes", {
+					type: "textarea",
+					attrs: `placeholder="${esc(t("service.placeholder.notes"))}"`,
+				})}
+				<div class="cluster service-form-actions">
+					<button class="btn btn-primary" type="submit">${esc(t("service.save"))}</button>
+					<button class="btn btn-ghost" type="button" data-action="cancel-service-entry">${esc(t("car.cancel"))}</button>
+				</div>
+			</form>`
+	}
+
+	function serviceEntryField(model, t, name, { type = "text", required = false, attrs = "" } = {}) {
+		const id = `service-${name}`
+		const error = model.inputs.errors[name]
+		const errorId = `${id}-error`
+		const value = model.inputs.serviceEntry[name]
+		const invalid = error ? ` aria-invalid="true" aria-describedby="${errorId}"` : ""
+		let control
+		if (type === "select") {
+			const categories = config.serviceCategories
+			control = `<select class="select" id="${id}" name="${name}" data-change="service-entry-category"${required ? " required" : ""}${invalid}>${categories.map((category) => `<option value="${category}"${value === category ? " selected" : ""}>${esc(t(`service.category.${category}`))}</option>`).join("")}</select>`
+		} else if (type === "textarea") {
+			control = `<textarea class="textarea" id="${id}" name="${name}" data-input="service-entry-input" data-field="${name}"${attrs ? ` ${attrs}` : ""}${invalid}>${esc(value)}</textarea>`
+		} else {
+			control = `<input class="input" id="${id}" name="${name}" type="${type}" data-input="service-entry-input" data-field="${name}" value="${esc(value)}"${required ? " required" : ""}${attrs ? ` ${attrs}` : ""}${invalid} />`
+		}
+		return `
+			<div class="field">
+				<label class="label" for="${id}">${esc(t(name === "title" ? "service.workTitle" : `service.${name}`))}${required ? "" : ` <span class="text-muted-foreground">(${esc(t("service.optional"))})</span>`}</label>
+				${control}
+				${error ? `<p class="field-error" id="${errorId}">${esc(t(error))}</p>` : ""}
+			</div>`
+	}
+
 	function serviceHistoryEntry(entry, derived, t) {
 		const km = new Intl.NumberFormat(derived.lang).format(entry.mileage)
-		const cost = new Intl.NumberFormat(derived.lang, {
-			style: "currency",
-			currency: derived.currency,
-			maximumFractionDigits: 0,
-		}).format(entry.cost)
+		const cost = formatKr(entry.cost, derived)
 		return `
 			<li class="history-entry">
-				<time class="history-date" datetime="${esc(entry.date)}">${esc(formatHistoryDate(entry.date, derived.lang))}</time>
+				<time class="history-date" datetime="${esc(entry.date)}">${esc(formatNorwegianDate(entry.date))}</time>
 				<div class="history-entry-details">
 					<div class="history-entry-heading">
 						<h2>${esc(entry.title)}</h2>
@@ -239,22 +314,15 @@ export function createView({ header, main }, i18n, config) {
 			</li>`
 	}
 
-	function formatHistoryDate(value, lang) {
+	function formatNorwegianDate(value) {
 		const date = new Date(`${value}T00:00:00`)
 		return Number.isNaN(date.getTime())
 			? value
-			: new Intl.DateTimeFormat(lang, { day: "2-digit", month: "2-digit", year: "numeric" }).format(
-					date
-				)
-	}
-
-	function formatDate(value, lang) {
-		const date = new Date(`${value}T00:00:00`)
-		return Number.isNaN(date.getTime())
-			? value
-			: new Intl.DateTimeFormat(lang, { day: "numeric", month: "short", year: "numeric" }).format(
-					date
-				)
+			: new Intl.DateTimeFormat("nb-NO", {
+					day: "2-digit",
+					month: "2-digit",
+					year: "numeric",
+				}).format(date)
 	}
 
 	function backIcon() {

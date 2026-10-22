@@ -28,6 +28,7 @@ import {
 	watchSystemTheme,
 	writePreference,
 } from "../../design-system/theme/preferences.js"
+import { SERVICE_CATEGORIES } from "../config.js"
 import { MODELS } from "../data/models.js"
 import { PLATES } from "../data/plates.js"
 
@@ -221,6 +222,59 @@ export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax, mile
 	return { car, errors }
 }
 
+function localDateString(date = new Date()) {
+	const month = String(date.getMonth() + 1).padStart(2, "0")
+	const day = String(date.getDate()).padStart(2, "0")
+	return `${date.getFullYear()}-${month}-${day}`
+}
+
+function isValidDate(value) {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+	const date = new Date(`${value}T00:00:00Z`)
+	return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+// A service form as a saved entry, plus an error key for each invalid field.
+// The keys are in form order, so the first one is the field to focus.
+export function validateServiceEntry(inputs, today = localDateString()) {
+	const title = inputs.title.trim()
+	const date = inputs.date.trim()
+	const mileageText = inputs.mileage.trim()
+	const costText = inputs.cost.trim()
+	const mileage = Number(mileageText)
+	const cost = Number(costText)
+	const entry = {
+		category: inputs.category,
+		title,
+		date,
+		mileage,
+		cost,
+		workshop: inputs.workshop.trim() || null,
+		notes: inputs.notes.trim() || null,
+	}
+	const dateError =
+		date === ""
+			? "service.error.dateRequired"
+			: !isValidDate(date)
+				? "service.error.dateInvalid"
+				: date > today
+					? "service.error.dateFuture"
+					: true
+	const valid = {
+		category: SERVICE_CATEGORIES.includes(entry.category),
+		title: title !== "",
+		date: dateError,
+		mileage: WHOLE_NUMBER.test(mileageText) && Number.isSafeInteger(mileage),
+		cost: WHOLE_NUMBER.test(costText) && Number.isSafeInteger(cost),
+	}
+	const errors = Object.fromEntries(
+		Object.entries(valid)
+			.filter(([, ok]) => ok !== true)
+			.map(([field, ok]) => [field, ok || `service.error.${field}`])
+	)
+	return { entry, errors }
+}
+
 const activeProfile = ({ profiles, activeProfileId }) =>
 	profiles.find((p) => p.id === activeProfileId) ?? null
 
@@ -307,6 +361,20 @@ export function createController({ model, view, i18n, config, languages }) {
 				event.preventDefault()
 				openHistory(target.dataset.id)
 			},
+			"register-service": registerService,
+			"save-service-entry": saveServiceEntry,
+			"cancel-service-entry": cancelServiceEntry,
+			"service-entry-input": (_event, target) => {
+				const { field } = target.dataset
+				if (Object.hasOwn(model.inputs.serviceEntry, field)) {
+					model.inputs.serviceEntry[field] = target.value
+				}
+			},
+			"service-entry-category": (_event, target) => {
+				if (SERVICE_CATEGORIES.includes(target.value)) {
+					model.inputs.serviceEntry.category = target.value
+				}
+			},
 			"back-garage": backToGarage,
 			"back-car": backToCar,
 			"history-filter": (_event, target) => setHistoryFilter(target.value),
@@ -336,6 +404,9 @@ export function createController({ model, view, i18n, config, languages }) {
 			cars: model.data.cars.filter((c) => c.profileId === model.data.activeProfileId),
 		}
 		derived.selectedCar = derived.cars.find((car) => car.id === model.app.selectedCarId) ?? null
+		derived.totalServiceCost = model.data.serviceEntries
+			.filter((entry) => entry.carId === model.app.selectedCarId)
+			.reduce((total, entry) => total + entry.cost, 0)
 		if (model.app.page === "history") {
 			const carHistory = model.data.serviceEntries.filter(
 				(entry) => entry.carId === model.app.selectedCarId
@@ -347,6 +418,7 @@ export function createController({ model, view, i18n, config, languages }) {
 				)
 				.sort((a, b) => b.date.localeCompare(a.date))
 		}
+		if (model.app.page === "serviceForm") derived.today = localDateString()
 		if (model.app.page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		view.render(model, derived)
 		syncHeader(derived)
@@ -434,6 +506,74 @@ export function createController({ model, view, i18n, config, languages }) {
 		go("garage")
 	}
 
+	function registerService() {
+		openServiceForm(model.app.selectedCarId)
+	}
+
+	function openServiceForm(carId, { pushHistory = true } = {}) {
+		const car = model.data.cars.find(
+			(candidate) => candidate.id === carId && candidate.profileId === model.data.activeProfileId
+		)
+		if (!car) return
+		model.app.selectedCarId = carId
+		clearServiceEntryInputs()
+		if (pushHistory && globalThis.history?.pushState) {
+			globalThis.history.pushState(
+				{ ...(globalThis.history.state ?? {}), motorCatalogPage: "serviceForm", carId },
+				"",
+				`#register-service-${carId}`
+			)
+		}
+		go("serviceForm")
+	}
+
+	function clearServiceEntryInputs() {
+		model.inputs.serviceEntry = structuredClone(blankInputs.serviceEntry)
+		model.inputs.errors = {}
+	}
+
+	function cancelServiceEntry() {
+		clearServiceEntryInputs()
+		if (
+			globalThis.history?.state?.motorCatalogPage === "serviceForm" &&
+			typeof globalThis.history.back === "function"
+		) {
+			globalThis.history.back()
+			return
+		}
+		go("history")
+	}
+
+	function saveServiceEntry() {
+		const car = model.data.cars.find(
+			(candidate) =>
+				candidate.id === model.app.selectedCarId &&
+				candidate.profileId === model.data.activeProfileId
+		)
+		if (!car) return
+		const { entry, errors } = validateServiceEntry(model.inputs.serviceEntry)
+		const fields = Object.keys(errors)
+		if (fields.length > 0) {
+			model.inputs.errors = errors
+			render()
+			view.focusField(`service-${fields[0]}`)
+			return
+		}
+		model.data.serviceEntries.push({ id: crypto.randomUUID(), carId: car.id, ...entry })
+		if (entry.mileage > car.mileage) car.mileage = entry.mileage
+		saveData(model.data)
+		model.app.historyFilter = "all"
+		clearServiceEntryInputs()
+		if (
+			globalThis.history?.state?.motorCatalogPage === "serviceForm" &&
+			typeof globalThis.history.back === "function"
+		) {
+			globalThis.history.back()
+			return
+		}
+		go("history")
+	}
+
 	// A car card opens its detail page. Only the active profile's own cars
 	// can be selected; a history entry lets the browser back button return.
 	function openCar(id, { pushHistory = true } = {}) {
@@ -491,7 +631,7 @@ export function createController({ model, view, i18n, config, languages }) {
 	}
 
 	function setHistoryFilter(filter) {
-		if (!["all", "service", "repair", "other"].includes(filter)) return
+		if (!["all", ...config.serviceCategories].includes(filter)) return
 		if (model.app.historyFilter === filter) return
 		model.app.historyFilter = filter
 		render()
@@ -500,6 +640,10 @@ export function createController({ model, view, i18n, config, languages }) {
 
 	function handlePopState(event) {
 		const entry = event.state
+		if (entry?.motorCatalogPage === "serviceForm") {
+			openServiceForm(entry.carId, { pushHistory: false })
+			return
+		}
 		if (entry?.motorCatalogPage === "history") {
 			openHistory(entry.carId, { pushHistory: false })
 			return
@@ -507,6 +651,13 @@ export function createController({ model, view, i18n, config, languages }) {
 		if (entry?.motorCatalogPage === "car") {
 			openCar(entry.carId, { pushHistory: false })
 			return
+		}
+		if (model.app.page === "serviceForm") {
+			clearServiceEntryInputs()
+			if (model.data.cars.some((car) => car.id === model.app.selectedCarId)) {
+				go("history")
+				return
+			}
 		}
 		if (model.app.page === "history") {
 			if (model.data.cars.some((car) => car.id === model.app.selectedCarId)) {

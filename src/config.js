@@ -7,12 +7,15 @@
    `flags` names the design-system/assets/flags/<cc>.svg file per currency.
    ====================================================================== */
 
+export const SERVICE_CATEGORIES = Object.freeze(["service", "repair", "other"])
+
 export const config = Object.freeze({
 	// Service costs are in NOK only, so the currency picker stays hidden.
 	currencies: ["NOK"],
 	baseCurrency: "NOK",
 	regions: { NO: "NOK" },
 	flags: { NOK: "no" },
+	serviceCategories: SERVICE_CATEGORIES,
 	// A profile name is trimmed and at most this many characters.
 	profileNameMax: 40,
 	// The car form (docs/design/data-model.md, Car). The last allowed year

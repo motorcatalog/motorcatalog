@@ -16,7 +16,7 @@
 
 export const model = {
 	app: {
-		page: "garage", // garage | carForm | car | history | maintenance | costs | profiles
+		page: "garage", // garage | carForm | car | history | serviceForm | maintenance | costs | profiles
 		selectedCarId: null,
 		historyFilter: "all", // all | service | repair | other
 		costsYear: null, // null = the current year
