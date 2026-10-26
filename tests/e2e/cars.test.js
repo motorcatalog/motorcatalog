@@ -35,6 +35,10 @@ after(async () => {
 async function openGarage(lists = {}) {
 	const context = await browser.createBrowserContext()
 	const page = await context.newPage()
+	// Reduced motion makes the design system scroll instantly. On Linux the
+	// smooth scroll to the focused heading after a page change can still be
+	// running when Puppeteer clicks, so the click lands on another row.
+	await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }])
 	await page.evaluateOnNewDocument((seed) => {
 		localStorage.setItem("lang", "en")
 		if (localStorage.getItem("motorcatalog")) return // keep what a test saved
