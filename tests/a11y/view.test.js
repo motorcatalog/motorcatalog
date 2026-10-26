@@ -162,6 +162,21 @@ const PAGES = {
 		selected: "c0",
 		errors: { title: "service.error.title", date: "service.error.dateFuture" },
 	},
+	"the car form while editing": {
+		page: "carForm",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		editing: "c0",
+	},
+	"a car page with the delete dialog open": {
+		page: "car",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		selected: "c1",
+		dialog: "delete-car-dialog",
+	},
 	"a car page for a car that is gone": {
 		page: "car",
 		profiles: ["Malin"],
@@ -170,9 +185,10 @@ const PAGES = {
 	},
 }
 
-for (const [name, { page, profiles, active, error, errors, cars = [], selected }] of Object.entries(
-	PAGES
-)) {
+for (const [
+	name,
+	{ page, profiles, active, error, errors, cars = [], selected, editing = null, dialog },
+] of Object.entries(PAGES)) {
 	test(`${name} has no axe violations`, async () => {
 		dom = createMount("en")
 		const view = createView({ header: dom.header, main: dom.mount }, i18n, MULTI_CURRENCY)
@@ -182,6 +198,7 @@ for (const [name, { page, profiles, active, error, errors, cars = [], selected }
 		model.data.activeProfileId = active === null ? null : `p${active}`
 		if (error) model.inputs.errors = { name: error }
 		if (errors) model.inputs.errors = errors
+		model.inputs.editingId = editing
 		derived.profile = model.data.profiles[active] ?? null
 		derived.cars = cars
 		if (page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
@@ -193,6 +210,8 @@ for (const [name, { page, profiles, active, error, errors, cars = [], selected }
 		}
 		view.renderHeader(model, derived)
 		view.render(model, derived)
+		// jsdom has no showModal(), so an open dialog is set by hand.
+		if (dialog) dom.mount.querySelector(`#${dialog}`).setAttribute("open", "")
 		assert.ok(dom.mount.querySelector("h1"))
 		assert.deepEqual(await axeComponent(dom.body), [])
 	})

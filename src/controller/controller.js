@@ -297,7 +297,14 @@ export function carHistory(entries, carId, filter = "all") {
 
 // The pages that belong to one car, and the address each one shows. Each
 // visit is a browser history entry, so Back and Forward move between them.
-const CAR_PAGES = { car: "car", history: "history", serviceForm: "register-service" }
+// The car form is one of them while it edits a car. Adding a car opens it
+// from the garage without an entry of its own.
+const CAR_PAGES = {
+	car: "car",
+	history: "history",
+	serviceForm: "register-service",
+	carForm: "edit-car",
+}
 
 const activeProfile = ({ profiles, activeProfileId }) =>
 	profiles.find((p) => p.id === activeProfileId) ?? null
@@ -409,10 +416,22 @@ export function createController({ model, view, i18n, config, languages }) {
 			"back-garage": () => leaveCarPage(model.app.page, "garage"),
 			"back-car": () => leaveCarPage("history", "car"),
 			"history-filter": (_event, target) => setHistoryFilter(target.value),
+			"edit-car": () => openCarPage("carForm", model.app.selectedCarId),
+			// An edit returns to its car. Adding returns to the garage.
 			"cancel-car": () => {
+				if (model.inputs.editingId) {
+					leaveCarPage("carForm", "car")
+					return
+				}
 				clearInputs()
 				go("garage")
 			},
+			// The dialog's own Cancel and Escape close it in the browser, so
+			// only Confirm comes back here.
+			"delete-car": () => {
+				if (ownCar(model.app.selectedCarId)) view.openDialog("delete-car-dialog")
+			},
+			"confirm-delete-car": deleteCar,
 			// actionName: (event, target) => { change model, then render() }
 		})
 		globalThis.addEventListener?.("popstate", (event) => {
@@ -510,11 +529,27 @@ export function createController({ model, view, i18n, config, languages }) {
 		model.inputs = structuredClone(blankInputs)
 	}
 
+	// The car form as Edit opens it: the saved car's values as the strings
+	// a field holds, and "" where the car has nothing.
+	function fillCarInputs(car) {
+		clearInputs()
+		model.inputs.editingId = car.id
+		for (const field of Object.keys(model.inputs.car)) {
+			model.inputs.car[field] = String(car[field] ?? "")
+		}
+	}
+
 	// The car form was submitted. A car with errors stays on the form with
-	// what was typed, and focus goes to the first field with an error.
+	// what was typed, and focus goes to the first field with an error. A
+	// new car opens the garage. An edited car is updated in place and its
+	// page opens again. The odometer may go down here: an edit is the one
+	// way to correct it.
 	function saveCar() {
 		const profileId = model.data.activeProfileId
 		if (!profileId) return
+		const { editingId } = model.inputs
+		const edited = editingId && ownCar(editingId)
+		if (editingId && !edited) return
 		const { car, errors } = validateCar(model.inputs.car, {
 			fuels: config.fuels,
 			nicknameMax: config.carNicknameMax,
@@ -529,10 +564,32 @@ export function createController({ model, view, i18n, config, languages }) {
 			view.focusField(`car-${fields[0]}`)
 			return
 		}
+		if (edited) {
+			Object.assign(edited, car)
+			saveData(model.data)
+			leaveCarPage("carForm", "car")
+			return
+		}
 		model.data.cars.push({ id: crypto.randomUUID(), profileId, ...car })
 		saveData(model.data)
 		clearInputs()
 		go("garage")
+	}
+
+	// Confirm in the delete dialog. The car goes with its service entries
+	// and tasks (docs/design/data-model.md, Deleting). Leaving goes back
+	// past the car's history entry, and an entry for a car that is gone
+	// opens the garage, so neither Back nor a reload returns to it.
+	function deleteCar() {
+		const car = ownCar(model.app.selectedCarId)
+		if (!car) return
+		const otherCars = (item) => item.carId !== car.id
+		model.data.cars = model.data.cars.filter((c) => c.id !== car.id)
+		model.data.serviceEntries = model.data.serviceEntries.filter(otherCars)
+		model.data.tasks = model.data.tasks.filter(otherCars)
+		saveData(model.data)
+		view.closeDialog("delete-car-dialog")
+		leaveCarPage("car", "garage")
 	}
 
 	// The active profile's car with this id, or null. Another profile's car
@@ -545,13 +602,16 @@ export function createController({ model, view, i18n, config, languages }) {
 
 	// Opens one of a car's pages. `push` adds a browser history entry that
 	// names the page and the car: all that Back, Forward or a reload needs
-	// to show it again. Another car starts its history unfiltered, and the
-	// service form always starts empty. False when the car isn't ours.
+	// to show it again. Another car starts its history unfiltered, the
+	// service form always starts empty, and the car form starts with the
+	// saved car. False when the car isn't ours.
 	function openCarPage(page, carId, { push = true } = {}) {
-		if (!Object.hasOwn(CAR_PAGES, page) || !ownCar(carId)) return false
+		const car = ownCar(carId)
+		if (!Object.hasOwn(CAR_PAGES, page) || !car) return false
 		if (carId !== model.app.selectedCarId) model.app.historyFilter = "all"
 		model.app.selectedCarId = carId
 		if (page === "serviceForm") clearServiceEntryInputs()
+		if (page === "carForm") fillCarInputs(car)
 		if (push) globalThis.history?.pushState({ page, carId }, "", `#${CAR_PAGES[page]}-${carId}`)
 		go(page)
 		return true
@@ -563,6 +623,7 @@ export function createController({ model, view, i18n, config, languages }) {
 	function leaveCarPage(page, fallback) {
 		if (leaving) return
 		if (page === "serviceForm") clearServiceEntryInputs()
+		if (page === "carForm") clearInputs()
 		if (globalThis.history?.state?.page === page) {
 			leaving = true
 			globalThis.history.back()
@@ -587,14 +648,17 @@ export function createController({ model, view, i18n, config, languages }) {
 	}
 
 	// A reload keeps the browser's history entry, so the page it names opens
-	// again instead of the garage. An entry for a car that is gone is
-	// replaced, so the address stops pointing at it.
+	// again instead of the garage. The edit form starts again from the saved
+	// car. An entry for a car that is gone is replaced, so the address stops
+	// pointing at it.
 	function restoreReloadedPage() {
 		const state = globalThis.history?.state
 		if (!Object.hasOwn(CAR_PAGES, state?.page ?? "")) return
-		if (ownCar(state.carId)) {
+		const car = ownCar(state.carId)
+		if (car) {
 			model.app.page = state.page
 			model.app.selectedCarId = state.carId
+			if (state.page === "carForm") fillCarInputs(car)
 			return
 		}
 		dropCarPageEntry()

@@ -368,6 +368,27 @@ main h1[tabindex="-1"]:focus {
 	margin-top: var(--space-2);
 }
 
+/* Delete on the car page asks first. .modal draws the box and centres it
+   across. The base reset zeroes every margin, so the auto block margins
+   that centre a modal dialog top to bottom are put back here. */
+.car-delete-dialog {
+	margin-block: auto;
+	color: var(--text);
+}
+.car-delete-dialog::backdrop {
+	background: color-mix(in srgb, var(--surface-0) 70%, transparent);
+}
+.car-delete-dialog h2 {
+	font-size: var(--text-xl);
+	overflow-wrap: anywhere;
+}
+.car-delete-dialog p {
+	margin-top: var(--space-2);
+}
+.car-delete-actions {
+	margin-top: var(--space-5);
+}
+
 @media (min-width: 768px) {
 	.history-controls {
 		grid-template-columns: minmax(0, 1fr) auto;

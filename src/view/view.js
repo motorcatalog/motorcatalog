@@ -144,8 +144,9 @@ export function createView({ header, main }, i18n, config) {
 
 	const carTitle = (car) => car.nickname ?? `${car.make} ${car.model}`
 
-	// The facts and the two stat cards from the car detail mockup, then the
-	// shortcut to the service history. The edit button arrives with #25.
+	// The facts and the two stat cards from the car detail mockup, the
+	// shortcut to the service history, then Edit and Delete. Delete opens
+	// the dialog under them, which is part of the page from the start.
 	function carPage(_model, derived, t) {
 		const car = derived.selectedCar
 		if (!car) return carMissing(t)
@@ -185,7 +186,28 @@ export function createView({ header, main }, i18n, config) {
 			</div>
 			<a class="card car-link" href="#history-${esc(car.id)}" data-action="open-history" data-id="${esc(car.id)}">
 				${icon("calendar")}<span class="car-link-copy"><strong>${esc(t("car.serviceRecords"))}</strong> <span>${esc(t("car.totalSpent", { cost: total }))}</span></span>
-			</a>`
+			</a>
+			<div class="cluster car-actions">
+				<button class="btn" type="button" data-action="edit-car">${editIcon()}<span>${esc(t("car.edit"))}</span></button>
+				<button class="btn btn-danger" type="button" data-action="delete-car">${deleteIcon()}<span>${esc(t("car.delete"))}</span></button>
+			</div>
+			${deleteDialog(car, t)}`
+	}
+
+	// A native <dialog>, so the browser keeps focus inside it, closes it on
+	// Escape and hands focus back to Delete. Focus starts on Cancel, the
+	// safe choice. Cancel sits in a method="dialog" form, which closes the
+	// dialog without the controller: nothing changes, so nothing renders.
+	function deleteDialog(car, t) {
+		return `
+			<dialog class="modal car-delete-dialog" id="delete-car-dialog" aria-labelledby="delete-car-title" aria-describedby="delete-car-text">
+				<h2 id="delete-car-title">${esc(t("car.deleteDialog.title", { car: carTitle(car) }))}</h2>
+				<p id="delete-car-text" class="text-muted-foreground">${esc(t("car.deleteDialog.text"))}</p>
+				<div class="cluster car-delete-actions">
+					<button class="btn btn-danger" type="button" data-action="confirm-delete-car">${esc(t("car.delete"))}</button>
+					<form method="dialog"><button class="btn" type="submit" autofocus>${esc(t("car.cancel"))}</button></form>
+				</div>
+			</dialog>`
 	}
 
 	// derived.history holds what the filter shows, newest first. The empty
@@ -346,6 +368,14 @@ export function createView({ header, main }, i18n, config) {
 		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4.7 18a9 9 0 1 1 14.6 0"/><path d="m12 13 4-4M6.5 18h11"/><circle cx="12" cy="13" r="1"/></svg>'
 	}
 
+	function editIcon() {
+		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>'
+	}
+
+	function deleteIcon() {
+		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
+	}
+
 	function vehicleIcon() {
 		return '<svg class="icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 11 1.6-4.1A2 2 0 0 1 8.5 5.5h7a2 2 0 0 1 1.9 1.4L19 11l1.5 1.4v5.1h-17v-5.1L5 11Z"/><path d="M4 11h16M7 17.5v1.5m10-1.5v1.5"/><circle cx="7.5" cy="14.5" r=".8"/><circle cx="16.5" cy="14.5" r=".8"/></svg>'
 	}
@@ -393,10 +423,12 @@ export function createView({ header, main }, i18n, config) {
 	]
 
 	// novalidate: each error is our own text under its field, the same way
-	// as on the profile form.
+	// as on the profile form. The same form edits a saved car while
+	// inputs.editingId names it.
 	function carFormPage(model, derived, t) {
+		const title = model.inputs.editingId ? "carForm.editTitle" : "carForm.title"
 		return `
-			<h1 tabindex="-1">${esc(t("carForm.title"))}</h1>
+			<h1 tabindex="-1">${esc(t(title))}</h1>
 			<form class="stack" data-submit="save-car" novalidate>
 				${CAR_FIELDS.map((field) => carField(model, derived, t, field)).join("")}
 				${datalist("car-makes", MAKES)}
@@ -631,6 +663,17 @@ export function createView({ header, main }, i18n, config) {
 		main.querySelector(`#${id}`)?.focus()
 	}
 
+	// Delete on the car page: the dialog opens as a modal, and the browser
+	// moves focus to its autofocus button.
+	function openDialog(id) {
+		main.querySelector(`#${id}`)?.showModal()
+	}
+
+	// Confirm in the dialog: closed before the page changes under it.
+	function closeDialog(id) {
+		main.querySelector(`#${id}`)?.close()
+	}
+
 	// A new make or country while the car form is open: the model
 	// suggestions and the plate example change without a redraw, so
 	// nothing typed and no focus is lost.
@@ -675,6 +718,8 @@ export function createView({ header, main }, i18n, config) {
 		focusPicker,
 		focusHeading,
 		focusField,
+		openDialog,
+		closeDialog,
 		setFieldValue,
 		updateCarForm,
 		bindActions,
