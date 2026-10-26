@@ -20,7 +20,8 @@
 
    model.data is saved as JSON under the single key "motorcatalog" after
    every change. Missing, broken or wrongly shaped data is ignored, and
-   the app starts empty (docs/design/data-model.md, Storage).
+   the app starts empty (docs/design/data-model.md, Storage). Export on
+   the profiles page hands the same data to the view as a JSON download.
    ====================================================================== */
 
 import {
@@ -234,6 +235,17 @@ export function localDateString(date = new Date()) {
 	return `${date.getFullYear()}-${month}-${day}`
 }
 
+// The file Export downloads: every profile on the device as JSON, with
+// `version` so a later import can check it. The name carries the local
+// date, so a backup taken just after midnight isn't dated yesterday.
+export function exportFile(data, date = new Date()) {
+	return {
+		name: `motorcatalog-${localDateString(date)}.json`,
+		type: "application/json",
+		text: `${JSON.stringify(data, null, 2)}\n`,
+	}
+}
+
 // A real calendar day: 2026-02-30 has the right shape but is not one.
 function isValidDate(value) {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -377,6 +389,8 @@ export function createController({ model, view, i18n, config, languages }) {
 			"create-profile": createProfile,
 			"choose-profile": (_event, target) => chooseProfile(target.dataset.id),
 			"switch-profile": () => setActiveProfile(null),
+			// Nothing changes, so nothing renders and focus stays on Export.
+			"export-data": () => view.downloadFile(exportFile(model.data)),
 			"add-car": () => {
 				clearInputs()
 				go("carForm")

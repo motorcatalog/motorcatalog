@@ -6,6 +6,7 @@
    ====================================================================== */
 
 import assert from "node:assert/strict"
+import { resolveObjectURL } from "node:buffer"
 import { afterEach, test } from "node:test"
 import { JSDOM } from "jsdom"
 import { createTranslator } from "../i18n/index.js"
@@ -222,8 +223,8 @@ test("a first visit shows the welcome page: a heading, a short intro and the cre
 	assert.equal(h1.getAttribute("tabindex"), "-1")
 	assert.equal(text(main.querySelector("h1 + p")), bundles.en["welcome.intro"])
 	assert.equal(main.querySelector("[data-action='choose-profile']"), null)
-	assert.equal(main.querySelector("h2"), null)
 	const form = main.querySelector("form[data-submit='create-profile']")
+	assert.equal(form.querySelector("h2"), null)
 	assert.ok(form.hasAttribute("novalidate"))
 	const input = form.querySelector("#profile-name")
 	assert.equal(text(form.querySelector("label[for='profile-name']")), bundles.en["profile.name"])
@@ -273,6 +274,55 @@ test("a profile name with markup is rendered as text, not as HTML", () => {
 	const { header } = mount(screen({ ...en, page: "garage", profiles: ["<b>x</b>"], active: 0 }))
 	assert.equal(header.querySelector("b"), null)
 	assert.equal(text(header.querySelector(".header-profile-name")), "<b>x</b>")
+})
+
+test("both profiles pages end with Export under its own heading, in the chosen language", () => {
+	for (const profiles of [[], ["Malin"]]) {
+		const { main } = mount(screen({ ...en, profiles }))
+		const section = main.querySelector("section.profile-export")
+		assert.equal(main.lastElementChild, section)
+		const heading = main.querySelector(`#${section.getAttribute("aria-labelledby")}`)
+		assert.equal(heading.tagName, "H2")
+		assert.equal(text(heading), bundles.en["export.title"])
+		assert.equal(text(section.querySelector("p")), bundles.en["export.text"])
+		const button = section.querySelector("button")
+		assert.deepEqual(
+			[button.type, button.dataset.action, text(button)],
+			["button", "export-data", "Export data"]
+		)
+		assert.equal(button.querySelector("svg").getAttribute("aria-hidden"), "true")
+		dom.window.close()
+	}
+	const nb = mount(screen({ chosen: { lang: "nb" } })).main
+	assert.equal(text(nb.querySelector("[data-action='export-data']")), "Eksporter data")
+})
+
+test("downloadFile hands the file to the browser through a link that is gone after the click", async () => {
+	const { main, view } = mount(screen(en))
+	const clicks = []
+	main.addEventListener("click", (event) => {
+		const link = event.target
+		event.preventDefault() // jsdom can't download
+		clicks.push({
+			download: link.download,
+			hidden: link.hidden,
+			blob: resolveObjectURL(link.href),
+			url: link.href,
+		})
+	})
+	view.downloadFile({
+		name: "motorcatalog-2026-10-26.json",
+		type: "application/json",
+		text: "{}\n",
+	})
+	assert.equal(clicks.length, 1)
+	const [click] = clicks
+	assert.equal(click.download, "motorcatalog-2026-10-26.json")
+	assert.equal(click.hidden, true)
+	assert.equal(click.blob.type, "application/json")
+	assert.equal(await click.blob.text(), "{}\n")
+	assert.equal(resolveObjectURL(click.url), undefined) // revoked
+	assert.equal(main.querySelector("a[download]"), null)
 })
 
 // A saved car as the car form stores it, owned by profile p0.

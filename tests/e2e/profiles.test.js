@@ -1,12 +1,14 @@
 /* ======================================================================
    tests/e2e/profiles.test.js: profiles in a real browser (#7)
-   Create a profile, reload, switch. Same harness as preferences.test.js:
+   Create a profile, reload, switch, export (#26). Same harness as preferences.test.js:
    Vite in-process, Puppeteer drives Chrome, a fresh browser context per
    test. Its own port, because node --test runs test files in parallel.
    ====================================================================== */
 
 import assert from "node:assert/strict"
-import { resolve } from "node:path"
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 import { after, before, test } from "node:test"
 import puppeteer from "puppeteer"
 import { createServer } from "vite"
@@ -31,8 +33,11 @@ after(async () => {
 })
 
 // A fresh page in English, so the asserted text is the en bundle's.
-async function open() {
-	const context = await browser.createBrowserContext()
+// `downloadPath` is where the browser saves downloads without asking.
+async function open({ downloadPath } = {}) {
+	const context = await browser.createBrowserContext(
+		downloadPath ? { downloadBehavior: { policy: "allow", downloadPath } } : {}
+	)
 	const page = await context.newPage()
 	await page.evaluateOnNewDocument(() => localStorage.setItem("lang", "en"))
 	await page.goto(origin, { waitUntil: "networkidle0" })
@@ -117,4 +122,64 @@ test("Switch profile opens the picker, and a second profile can be added and cho
 	await page.reload({ waitUntil: "networkidle0" })
 	assert.equal(await page.$eval(".header-profile-name", (el) => el.textContent), "Malin")
 	await page.browserContext().close()
+})
+
+// The first finished download in `dir`. Chrome writes to a .crdownload
+// file first and renames it when the download is done.
+async function nextDownload(dir, timeout = 5000) {
+	const end = Date.now() + timeout
+	while (Date.now() < end) {
+		const done = (await readdir(dir)).filter((f) => !f.endsWith(".crdownload"))
+		if (done.length > 0) {
+			return { name: done[0], text: await readFile(join(dir, done[0]), "utf8") }
+		}
+		await new Promise((r) => setTimeout(r, 50))
+	}
+	throw new Error(`no download in ${dir} after ${timeout} ms`)
+}
+
+test("Export downloads a dated JSON file with the version, empty at first and then with every profile", async () => {
+	const dir = await mkdtemp(join(tmpdir(), "motorcatalog-export-"))
+	try {
+		const page = await open({ downloadPath: dir })
+		// The local date in the browser, the one the file is named by.
+		const today = await page.evaluate(() => {
+			const d = new Date()
+			const pad = (n) => String(n).padStart(2, "0")
+			return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+		})
+		await page.click("[data-action='export-data']")
+		const empty = await nextDownload(dir)
+		assert.equal(empty.name, `motorcatalog-${today}.json`)
+		assert.deepEqual(JSON.parse(empty.text), {
+			version: 1,
+			activeProfileId: null,
+			profiles: [],
+			cars: [],
+			serviceEntries: [],
+			tasks: [],
+		})
+		assert.equal(await page.evaluate(() => document.activeElement?.dataset.action), "export-data")
+		await rm(join(dir, empty.name)) // the next file gets the same name
+
+		await create(page, "Malin")
+		await page.waitForSelector("[data-action='switch-profile']")
+		await page.click("[data-action='switch-profile']")
+		await create(page, "Rune")
+		await page.waitForSelector("[data-action='switch-profile']")
+		await page.click("[data-action='switch-profile']")
+		await page.waitForSelector("[data-action='export-data']")
+		await page.click("[data-action='export-data']")
+		const filled = await nextDownload(dir)
+		assert.equal(filled.name, `motorcatalog-${today}.json`)
+		const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("motorcatalog")))
+		assert.deepEqual(JSON.parse(filled.text), saved)
+		assert.deepEqual(
+			saved.profiles.map((p) => p.name),
+			["Malin", "Rune"]
+		)
+		await page.browserContext().close()
+	} finally {
+		await rm(dir, { recursive: true, force: true })
+	}
 })
