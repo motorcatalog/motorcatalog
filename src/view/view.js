@@ -159,9 +159,10 @@ export function createView({ header, main }, i18n, config) {
 	const carTitle = (car) => car.nickname ?? `${car.make} ${car.model}`
 
 	// The facts and the two stat cards from the car detail mockup, the
-	// shortcut to the service history, then Edit and Delete. Delete opens
-	// the dialog under them, which is part of the page from the start.
-	function carPage(_model, derived, t) {
+	// shortcut to the service history, then Mark done (only with an
+	// EU-kontroll date), Edit and Delete. Mark done and Delete each open a
+	// dialog under them, which is part of the page from the start.
+	function carPage(model, derived, t) {
 		const car = derived.selectedCar
 		if (!car) return carMissing(t)
 		const km = new Intl.NumberFormat(derived.lang).format(car.mileage)
@@ -205,10 +206,40 @@ export function createView({ header, main }, i18n, config) {
 				${icon("calendar")}<span class="car-link-copy"><strong>${esc(t("car.serviceRecords"))}</strong> <span>${esc(t("car.totalSpent", { cost: total }))}</span></span>
 			</a>
 			<div class="cluster car-actions">
+				${car.euInspectionDue ? `<button class="btn" id="mark-eu-done" type="button" data-action="mark-eu-done">${icon("check")}<span>${esc(t("car.euDone"))}</span></button>` : ""}
 				<button class="btn" type="button" data-action="edit-car">${editIcon()}<span>${esc(t("car.edit"))}</span></button>
 				<button class="btn btn-danger" type="button" data-action="delete-car">${deleteIcon()}<span>${esc(t("car.delete"))}</span></button>
 			</div>
+			${car.euInspectionDue ? euDoneDialog(model, t) : ""}
 			${deleteDialog(car, t)}`
+	}
+
+	// Mark done asks for the next date, filled with the suggestion the
+	// controller put in the model. Save sits under the form and submits it
+	// through its form attribute, so Enter in the field saves too. Cancel
+	// closes the dialog in the browser, as in the delete dialog.
+	function euDoneDialog(model, t) {
+		const id = "eu-done-nextDue"
+		const error = model.inputs.errors.nextDue
+		const errorId = `${id}-error`
+		const invalid = error ? ` aria-invalid="true" aria-describedby="${errorId}"` : ""
+		return `
+			<dialog class="modal car-dialog" id="eu-done-dialog" aria-labelledby="eu-done-title" aria-describedby="eu-done-text">
+				<h2 id="eu-done-title">${esc(t("car.euDoneDialog.title"))}</h2>
+				<p id="eu-done-text" class="text-muted-foreground">${esc(t("car.euDoneDialog.text"))}</p>
+				<form class="car-dialog-form" id="eu-done-form" data-submit="save-eu-done" novalidate>
+					<div class="field">
+						<label class="label" for="${id}">${esc(t("car.euDoneDialog.date"))}</label>
+						<input class="input" type="date" id="${id}" name="nextDue" required autofocus autocomplete="off"
+							data-input="eu-done-input" value="${esc(model.inputs.euDone.nextDue)}"${invalid} />
+						${error ? `<p class="field-error" id="${errorId}">${esc(t(error))}</p>` : ""}
+					</div>
+				</form>
+				<div class="cluster car-dialog-actions">
+					<button class="btn btn-primary" type="submit" form="eu-done-form">${esc(t("car.euDoneDialog.save"))}</button>
+					<form method="dialog"><button class="btn" type="submit">${esc(t("car.cancel"))}</button></form>
+				</div>
+			</dialog>`
 	}
 
 	// A native <dialog>, so the browser keeps focus inside it, closes it on
@@ -217,10 +248,10 @@ export function createView({ header, main }, i18n, config) {
 	// dialog without the controller: nothing changes, so nothing renders.
 	function deleteDialog(car, t) {
 		return `
-			<dialog class="modal car-delete-dialog" id="delete-car-dialog" aria-labelledby="delete-car-title" aria-describedby="delete-car-text">
+			<dialog class="modal car-dialog" id="delete-car-dialog" aria-labelledby="delete-car-title" aria-describedby="delete-car-text">
 				<h2 id="delete-car-title">${esc(t("car.deleteDialog.title", { car: carTitle(car) }))}</h2>
 				<p id="delete-car-text" class="text-muted-foreground">${esc(t("car.deleteDialog.text"))}</p>
-				<div class="cluster car-delete-actions">
+				<div class="cluster car-dialog-actions">
 					<button class="btn btn-danger" type="button" data-action="confirm-delete-car">${esc(t("car.delete"))}</button>
 					<form method="dialog"><button class="btn" type="submit" autofocus>${esc(t("car.cancel"))}</button></form>
 				</div>

@@ -374,24 +374,28 @@ main h1[tabindex="-1"]:focus {
 	margin-top: var(--space-2);
 }
 
-/* Delete on the car page asks first. .modal draws the box and centres it
-   across. The base reset zeroes every margin, so the auto block margins
-   that centre a modal dialog top to bottom are put back here. */
-.car-delete-dialog {
+/* The car page's dialogs: Delete asks first, and Mark done asks for the
+   next EU-kontroll date. .modal draws the box and centres it across. The
+   base reset zeroes every margin, so the auto block margins that centre a
+   modal dialog top to bottom are put back here. */
+.car-dialog {
 	margin-block: auto;
 	color: var(--text);
 }
-.car-delete-dialog::backdrop {
+.car-dialog::backdrop {
 	background: color-mix(in srgb, var(--surface-0) 70%, transparent);
 }
-.car-delete-dialog h2 {
+.car-dialog h2 {
 	font-size: var(--text-xl);
 	overflow-wrap: anywhere;
 }
-.car-delete-dialog p {
+.car-dialog > p {
 	margin-top: var(--space-2);
 }
-.car-delete-actions {
+.car-dialog-form {
+	margin-top: var(--space-4);
+}
+.car-dialog-actions {
 	margin-top: var(--space-5);
 }
 

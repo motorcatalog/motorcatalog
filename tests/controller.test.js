@@ -22,9 +22,11 @@ import {
 	resolvePreferences,
 	STORAGE_KEY,
 	suggestedModels,
+	suggestedNextEuInspection,
 	systemCurrency,
 	typedCarInput,
 	validateCar,
+	validateNextEuInspection,
 	validateProfileName,
 	validateServiceEntry,
 } from "../src/controller/controller.js"
@@ -1580,4 +1582,111 @@ test("every render hands the view each car's EU status, worked out and never sto
 	assert.deepEqual(view.derived.euStatus, { c0: "overdue", c1: "ok" })
 	const stored = storedData(storage).cars[1]
 	assert.deepEqual(Object.keys(stored).sort(), Object.keys({ ...SAVED_CAR, id: "" }).sort())
+})
+
+// ---- Mark EU-kontroll done (#43) ----
+
+test("suggestedNextEuInspection adds the interval to the old date, and a day the month lacks becomes its last", () => {
+	assert.equal(suggestedNextEuInspection("2027-03-01", 24), "2029-03-01")
+	assert.equal(suggestedNextEuInspection("2026-12-31", 24), "2028-12-31")
+	assert.equal(suggestedNextEuInspection("2028-02-29", 24), "2030-02-28") // 2030 has no 29.02
+})
+
+test("validateNextEuInspection needs a real date, and a past one is fine as in the car form", () => {
+	assert.deepEqual(validateNextEuInspection(" 2029-03-01 "), { date: "2029-03-01", error: null })
+	assert.deepEqual(validateNextEuInspection("2020-01-01"), { date: "2020-01-01", error: null })
+	for (const typed of ["", "   "]) {
+		assert.equal(validateNextEuInspection(typed).error, "car.error.euDoneRequired")
+	}
+	for (const typed of ["2029-02-30", "01.03.2029", "soon"]) {
+		assert.equal(validateNextEuInspection(typed).error, "car.error.euInspectionDue", typed)
+	}
+})
+
+// Malin's c0 with an EU-kontroll date, c1 without one, Rune's c9 with one.
+function garageWithEuDates(due = "2027-03-01") {
+	const storage = garageWith()
+	const data = storedData(storage)
+	data.cars[0].euInspectionDue = due
+	data.cars[2].euInspectionDue = due
+	storage.items[STORAGE_KEY] = JSON.stringify(data)
+	return storage
+}
+
+test("Mark done opens the dialog with the old date plus two years and changes nothing yet", () => {
+	fakeHistory()
+	const storage = garageWithEuDates()
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["mark-eu-done"]()
+	assert.equal(model.inputs.euDone.nextDue, "2029-03-01")
+	assert.deepEqual(model.inputs.errors, {})
+	assert.deepEqual(view.dialogs, ["open eu-done-dialog"])
+	assert.deepEqual(view.fields, ["mark-eu-done"]) // where focus goes back when it closes
+	assert.equal(model.app.page, "car")
+	assert.equal(storage.items[STORAGE_KEY], before)
+})
+
+test("Save stores the date, closes the dialog and works the status out again on the car page", () => {
+	const history = fakeHistory()
+	const storage = garageWithEuDates("2000-01-01")
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	const entries = history.entries.length
+	assert.equal(view.derived.euStatus.c0, "overdue")
+	view.handlers["mark-eu-done"]()
+	view.handlers["eu-done-input"](null, { value: "2999-12-31" })
+	view.handlers["save-eu-done"]()
+	assert.equal(model.data.cars[0].euInspectionDue, "2999-12-31")
+	assert.deepEqual(storedData(storage), model.data)
+	assert.deepEqual(view.dialogs, ["open eu-done-dialog", "close eu-done-dialog"])
+	assert.equal(view.derived.euStatus.c0, "ok")
+	assert.equal(model.app.page, "car")
+	assert.equal(history.entries.length, entries) // no history entry of its own
+	assert.equal(view.fields.at(-1), "mark-eu-done")
+	assert.equal(model.inputs.euDone.nextDue, "")
+})
+
+test("Save without a change stores the suggested date", () => {
+	fakeHistory()
+	const storage = garageWithEuDates()
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["mark-eu-done"]()
+	view.handlers["save-eu-done"]()
+	assert.equal(storedData(storage).cars[0].euInspectionDue, "2029-03-01")
+	assert.equal(model.data.cars[2].euInspectionDue, "2027-03-01") // Rune's car is left alone
+})
+
+test("an empty date opens the dialog again with its error, saves nothing, and the next open starts afresh", () => {
+	fakeHistory()
+	const storage = garageWithEuDates()
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["mark-eu-done"]()
+	view.handlers["eu-done-input"](null, { value: "" })
+	view.handlers["save-eu-done"]()
+	assert.deepEqual(model.inputs.errors, { nextDue: "car.error.euDoneRequired" })
+	assert.deepEqual(view.dialogs, ["open eu-done-dialog", "open eu-done-dialog"])
+	assert.equal(storage.items[STORAGE_KEY], before)
+	view.handlers["mark-eu-done"]()
+	assert.equal(model.inputs.euDone.nextDue, "2029-03-01")
+	assert.deepEqual(model.inputs.errors, {})
+})
+
+test("Mark done and Save do nothing for a car without a date or one the profile doesn't own", () => {
+	fakeHistory()
+	const storage = garageWithEuDates()
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	for (const id of ["c1", "c9"]) {
+		model.app.selectedCarId = id
+		view.handlers["mark-eu-done"]()
+		model.inputs.euDone.nextDue = "2029-03-01"
+		view.handlers["save-eu-done"]()
+	}
+	assert.deepEqual(view.dialogs, [])
+	assert.equal(storage.items[STORAGE_KEY], before)
 })

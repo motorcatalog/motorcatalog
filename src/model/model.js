@@ -50,6 +50,7 @@ export const model = {
 			notes: "",
 		},
 		task: { title: "", dueDate: "", dueMileage: "", repeatMonths: "", repeatKm: "" },
+		euDone: { nextDue: "" }, // the next EU-kontroll date in Mark done
 		editingId: null, // the id being edited, or null when adding
 		errors: {}, // field name to error text key
 	},

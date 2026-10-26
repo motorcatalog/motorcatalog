@@ -157,6 +157,7 @@ export const model = {
     task: {
       title: "", dueDate: "", dueMileage: "", repeatMonths: "", repeatKm: "",
     },
+    euDone: { nextDue: "" }, // the next EU-kontroll date in Mark done
     editingId: null, // the id being edited, or null when adding
     errors: {}, // field name to error text key
   },
@@ -217,6 +218,12 @@ When a task with `repeatMonths` or `repeatKm` is marked done:
 1. It gets `doneDate` and `doneMileage` and moves to the completed list.
 2. The controller adds a new open task with the same title and repeat values. Its `dueDate` is `doneDate` plus `repeatMonths`, and its `dueMileage` is `doneMileage` plus `repeatKm`.
 
+### Marking the EU-kontroll done
+
+Mark done on the car page shows only when the car has an `euInspectionDue`. It opens a dialog with the next date filled in: the old date plus 24 calendar months (`euInspectionIntervalMonths` in `src/config.js`). The suggestion counts from the old date, never from today, because an EU-kontroll done up to 2 months early keeps its date. A day the month doesn't have becomes its last day, so 29.02.2028 suggests 28.02.2030.
+
+The user can change the date before saving. It must be a real date and can't be empty. A past date is allowed, as in the car form. Saving replaces `euInspectionDue`, and the status is worked out again from the new date.
+
 ### Deleting
 
 Deleting a car deletes its service entries and tasks. Deleting a profile deletes its cars, with their entries and tasks.
@@ -254,4 +261,4 @@ Every status shows as text with an icon, never colour alone. Only overdue is col
 
 - Car photos. Images stored as text would quickly fill localStorage's roughly 5 MB.
 - A separate mileage log, e.g. one reading per refuel.
-- EU inspection rolling forward by itself. The user edits `euInspectionDue` after an inspection.
+- EU inspection rolling forward by itself. The user marks it done, which suggests the next date (see [Marking the EU-kontroll done](#marking-the-eu-kontroll-done)).

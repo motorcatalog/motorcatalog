@@ -256,11 +256,12 @@ function isValidDate(value) {
 	return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 
-// A stored YYYY-MM-DD moved `months` calendar months back. A day the
-// month doesn't have becomes its last day: 31.05 minus three is 28.02.
-function monthsBefore(date, months) {
+// A stored YYYY-MM-DD moved `months` calendar months, back when negative.
+// A day the month doesn't have becomes its last day: 31.05 minus three is
+// 28.02, and 29.02.2028 plus 24 is 28.02.2030.
+function addMonths(date, months) {
 	const [year, month, day] = date.split("-").map(Number)
-	const target = new Date(Date.UTC(year, month - 1 - months, 1))
+	const target = new Date(Date.UTC(year, month - 1 + months, 1))
 	const lastDay = new Date(
 		Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)
 	).getUTCDate()
@@ -275,7 +276,25 @@ function monthsBefore(date, months) {
 export function euInspectionStatus(due, today, months) {
 	if (typeof due !== "string" || !isValidDate(due)) return null
 	if (today > due) return "overdue"
-	return today >= monthsBefore(due, months) ? "dueSoon" : "ok"
+	return today >= addMonths(due, -months) ? "dueSoon" : "ok"
+}
+
+// The next EU-kontroll date that Mark done suggests: the old date plus
+// `months`. An inspection done up to 2 months early keeps the old date as
+// its base, so the suggestion never counts from today.
+export function suggestedNextEuInspection(due, months) {
+	return addMonths(due, months)
+}
+
+// The date typed in Mark done, with the car form's date rule: a real
+// calendar day, and a past one is fine. Unlike in the car form it can't be
+// empty, since marking the inspection done always sets the next one.
+export function validateNextEuInspection(input) {
+	const date = input.trim()
+	let error = null
+	if (date === "") error = "car.error.euDoneRequired"
+	else if (!isValidDate(date)) error = "car.error.euInspectionDue"
+	return { date, error }
 }
 
 function dateCheck(date, today) {
@@ -471,6 +490,13 @@ export function createController({ model, view, i18n, config, languages }) {
 				if (ownCar(model.app.selectedCarId)) view.openDialog("delete-car-dialog")
 			},
 			"confirm-delete-car": deleteCar,
+			// Like Delete, the dialog's own Cancel and Escape close it in the
+			// browser. Typing needs no redraw.
+			"mark-eu-done": openEuDone,
+			"eu-done-input": (_event, target) => {
+				model.inputs.euDone.nextDue = target.value
+			},
+			"save-eu-done": saveEuDone,
 			// actionName: (event, target) => { change model, then render() }
 		})
 		globalThis.addEventListener?.("popstate", (event) => {
@@ -638,6 +664,48 @@ export function createController({ model, view, i18n, config, languages }) {
 		saveData(model.data)
 		view.closeDialog("delete-car-dialog")
 		leaveCarPage("car", "garage")
+	}
+
+	// Mark done on the car page of a car with an EU-kontroll date: the
+	// dialog opens with the suggested next date.
+	function openEuDone() {
+		const car = ownCar(model.app.selectedCarId)
+		if (!car?.euInspectionDue) return
+		model.inputs.euDone.nextDue = suggestedNextEuInspection(
+			car.euInspectionDue,
+			config.euInspectionIntervalMonths
+		)
+		model.inputs.errors = {}
+		showEuDoneDialog()
+	}
+
+	// The dialog is drawn with the car page, so it shows what the model
+	// holds after a render. Mark done takes focus first: it is where the
+	// browser puts focus back when the dialog closes.
+	function showEuDoneDialog() {
+		render()
+		view.focusField("mark-eu-done")
+		view.openDialog("eu-done-dialog")
+	}
+
+	// Save in the dialog. An error opens it again with the error under the
+	// field. A good date replaces the old one, and the car page is drawn
+	// again, so its EU-kontroll status is worked out from the new date.
+	function saveEuDone() {
+		const car = ownCar(model.app.selectedCarId)
+		if (!car?.euInspectionDue) return
+		const { date, error } = validateNextEuInspection(model.inputs.euDone.nextDue)
+		if (error) {
+			model.inputs.errors = { nextDue: error }
+			showEuDoneDialog()
+			return
+		}
+		car.euInspectionDue = date
+		saveData(model.data)
+		view.closeDialog("eu-done-dialog")
+		model.inputs.euDone.nextDue = ""
+		render()
+		view.focusField("mark-eu-done")
 	}
 
 	// The active profile's car with this id, or null. Another profile's car
