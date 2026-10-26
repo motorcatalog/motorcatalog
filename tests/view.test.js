@@ -11,7 +11,12 @@ import { afterEach, test } from "node:test"
 import { JSDOM } from "jsdom"
 import { createTranslator } from "../i18n/index.js"
 import { config } from "../src/config.js"
-import { carFormHints, carHistory, resolvePreferences } from "../src/controller/controller.js"
+import {
+	carFormHints,
+	carHistory,
+	euInspectionStatus,
+	resolvePreferences,
+} from "../src/controller/controller.js"
 import { MAKES } from "../src/data/models.js"
 import { PLATES } from "../src/data/plates.js"
 import { bundles, FALLBACK_LANG } from "../src/locales/index.js"
@@ -20,6 +25,9 @@ import { createView, escapeHtml } from "../src/view/view.js"
 import { MULTI_CURRENCY } from "./fixtures.js"
 
 const i18n = createTranslator(bundles, { fallback: FALLBACK_LANG })
+
+// The day every screen is rendered on, so the EU statuses hold any day.
+const TODAY = "2026-10-26"
 
 let dom
 afterEach(() => dom?.window.close())
@@ -64,6 +72,9 @@ function screen({
 			...resolvePreferences(model.app.preferences),
 			profile,
 			cars: profileCars,
+			euStatus: Object.fromEntries(
+				profileCars.map((c) => [c.id, euInspectionStatus(c.euInspectionDue, TODAY, 3)])
+			),
 		}),
 	}
 }
@@ -406,6 +417,38 @@ test("a VIN shows with the registration number, and nothing shows without one", 
 	assert.ok(!facts(without).some(([label]) => label === bundles.en["garage.vin"]))
 })
 
+// From TODAY: 01.03.2027 is more than three months off, 26.01.2027 is
+// three months off to the day, and 25.10.2026 has passed.
+const EU_DATES = Object.freeze({ ok: "2027-03-01", dueSoon: "2027-01-26", overdue: "2026-10-25" })
+
+test("a card with an EU-kontroll date shows it with its status in text and icon, a card without one neither", () => {
+	const cars = Object.values(EU_DATES).map((euInspectionDue, i) => ({
+		...VOLVO,
+		id: `c${i}`,
+		euInspectionDue,
+	}))
+	const cards = [...garage("en", [...cars, { ...VOLVO, id: "c9" }]).querySelectorAll(".car-card")]
+	const eu = (card) => card.querySelector(".car-card-eu")
+	assert.deepEqual(
+		cards.slice(0, 3).map((card) => words(eu(card))),
+		[
+			"EU inspection Mar 1, 2027 OK",
+			"EU inspection Jan 26, 2027 Due soon",
+			"EU inspection Oct 25, 2026 Overdue",
+		]
+	)
+	for (const [i, status] of Object.keys(EU_DATES).entries()) {
+		const badge = eu(cards[i]).querySelector(".eu-status")
+		assert.equal(badge.dataset.status, status)
+		assert.equal(badge.querySelector("svg").getAttribute("aria-hidden"), "true")
+	}
+	assert.equal(eu(cards[0]).querySelector("time").getAttribute("datetime"), "2027-03-01")
+	assert.equal(eu(cards[3]), null)
+	assert.equal(cards[3].querySelector(".eu-status"), null)
+	const nb = garage("nb", cars).querySelectorAll(".car-card .eu-status")
+	assert.deepEqual([...nb].map(words), ["I orden", "Snart frist", "Over fristen"])
+})
+
 test("the card follows the chosen language, numbers included", () => {
 	const card = garage("nb", [VOLVO]).querySelector(".car-card")
 	assert.equal(text(card.querySelector(".car-card-meta")), "2008 · Diesel")
@@ -461,6 +504,7 @@ test("the car form has a label per field, marks the required ones and lists the 
 			"fuel",
 			"engine",
 			"mileage",
+			"euInspectionDue",
 		]
 	)
 	for (const el of fields) {
@@ -471,6 +515,7 @@ test("the car form has a label per field, marks the required ones and lists the 
 	}
 	const required = fields.filter((el) => el.required).map((el) => el.dataset.field)
 	assert.deepEqual(required, ["make", "model", "year", "regCountry", "regNumber", "mileage"])
+	assert.equal(main.querySelector("#car-euInspectionDue").type, "date")
 	const fuels = [...main.querySelectorAll("#car-fuel option")].map((o) => o.value)
 	assert.deepEqual(fuels, config.fuels)
 	assert.equal(main.querySelector("#car-fuel").value, "petrol")
@@ -516,9 +561,10 @@ test("the car form keeps what was typed and shows each error under its field", (
 	assert.equal(main.querySelector("#car-model").hasAttribute("aria-invalid"), false)
 })
 
-test("every car field but fuel shows a short example inside it until something is typed", () => {
+test("every car field but fuel and the date shows a short example inside it until something is typed", () => {
 	const { main } = mount(screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0 }))
-	for (const el of main.querySelectorAll("input[data-input='car-input']")) {
+	assert.equal(main.querySelector("#car-euInspectionDue").hasAttribute("placeholder"), false)
+	for (const el of main.querySelectorAll("input[data-input='car-input']:not([type='date'])")) {
 		const { field } = el.dataset
 		if (field !== "regNumber")
 			assert.equal(el.placeholder, bundles.en[`car.placeholder.${field}`], field)
@@ -726,12 +772,14 @@ test("a nickname takes the title with make and model under it, and VIN and engin
 test("the stat cards show the odometer in km and the EU-kontroll date in the chosen language", () => {
 	const stats = (lang, car) =>
 		[...mount(carScreen({ lang, car })).main.querySelectorAll(".car-stat-card")].map(words)
-	assert.deepEqual(stats("en"), ["Odometer 184,000 km", "EU inspection Mar 1, 2027"])
+	assert.deepEqual(stats("en"), ["Odometer 184,000 km", "EU inspection Mar 1, 2027 OK"])
 	const [odometer, inspection] = stats("nb")
 	assert.match(odometer, /184\s000 km$/)
-	assert.match(inspection, /1\. mars 2027$/)
+	assert.match(inspection, /1\. mars 2027 I orden$/)
+	const [, overdue] = stats("en", { ...SAVED_CAR, euInspectionDue: EU_DATES.overdue })
+	assert.equal(overdue, "EU inspection Oct 25, 2026 Overdue")
 	const [, noDate] = stats("en", { ...SAVED_CAR, euInspectionDue: null })
-	assert.equal(noDate, "EU inspection No date set")
+	assert.equal(noDate, "EU inspection No date set") // and no status
 })
 
 test("the car page links to its service history with the total spent, and has no dead ends", () => {

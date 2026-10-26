@@ -15,6 +15,7 @@ import {
 	carFormHints,
 	carHistory,
 	createController,
+	euInspectionStatus,
 	exportFile,
 	loadData,
 	resolveCountry,
@@ -169,6 +170,7 @@ test("first load resolves every preference from the browser when nothing is stor
 		currency: "NOK",
 		profile: null,
 		cars: [],
+		euStatus: {},
 	}) // no matchMedia: the DS default
 	assert.equal(globalThis.document.documentElement.lang, "nb")
 	assert.equal(globalThis.document.documentElement.dataset.theme, "dark")
@@ -690,10 +692,40 @@ test("validateCar caps the nickname and only takes a fuel from the list", () => 
 	})
 })
 
+test("validateCar takes an optional real date for the next EU-kontroll, a past one too", () => {
+	const due = (euInspectionDue) => validateCar({ ...TYPED, euInspectionDue }, RULES)
+	assert.equal(due("2027-03-01").car.euInspectionDue, "2027-03-01")
+	assert.deepEqual(due("2020-03-01").errors, {}) // overdue, but still a date to show
+	assert.deepEqual(due("2027-02-30").errors, { euInspectionDue: "car.error.euInspectionDue" })
+	assert.deepEqual(due("01.03.2027").errors, { euInspectionDue: "car.error.euInspectionDue" })
+})
+
+// docs/design/data-model.md, EU-kontroll status. Due soon starts on the
+// date three calendar months before, or that month's last day.
+test("euInspectionStatus is due soon from three calendar months before, and overdue after the date", () => {
+	const status = (due, today) => euInspectionStatus(due, today, 3)
+	assert.equal(status("2027-01-31", "2026-10-30"), "ok")
+	assert.equal(status("2027-01-31", "2026-10-31"), "dueSoon")
+	assert.equal(status("2027-01-31", "2027-01-31"), "dueSoon") // the date itself
+	assert.equal(status("2027-01-31", "2027-02-01"), "overdue")
+	assert.equal(status("2027-05-31", "2027-02-27"), "ok") // no 31.02, so 28.02 counts
+	assert.equal(status("2027-05-31", "2027-02-28"), "dueSoon")
+	assert.equal(status("2028-05-31", "2028-02-28"), "ok") // a leap year has 29.02
+	assert.equal(status("2028-05-31", "2028-02-29"), "dueSoon")
+	assert.equal(status("2027-02-15", "2026-11-14"), "ok") // across new year
+	assert.equal(status("2027-02-15", "2026-11-15"), "dueSoon")
+})
+
+test("euInspectionStatus is null without a real date, so a car without one shows no status", () => {
+	for (const due of [null, undefined, "", "2027-02-30", "soon"]) {
+		assert.equal(euInspectionStatus(due, "2026-10-26", 3), null, String(due))
+	}
+})
+
 // What the user does: type every field, then submit the car form.
 function fillCar(view, values) {
 	for (const [field, value] of Object.entries(values)) {
-		if (field !== "euInspectionDue") view.handlers["car-input"](null, { dataset: { field }, value })
+		view.handlers["car-input"](null, { dataset: { field }, value })
 	}
 }
 
@@ -1528,4 +1560,24 @@ test("Export holds every profile on the device with their cars, service entries 
 	assert.deepEqual(ids(exported.cars), ["c0", "c1", "c9"]) // another profile's car too
 	assert.deepEqual(ids(exported.serviceEntries), ["a", "b"])
 	assert.deepEqual(ids(exported.tasks), ["t0", "t1"])
+})
+
+// Far from today either way, so the test holds on any day it runs.
+test("every render hands the view each car's EU status, worked out and never stored", () => {
+	const storage = garageWith()
+	const data = storedData(storage)
+	data.cars[0].euInspectionDue = "2000-01-01"
+	delete data.cars[1].euInspectionDue // a car saved before the field existed
+	storage.items[STORAGE_KEY] = JSON.stringify(data)
+	const { model, view } = boot(storage)
+	assert.deepEqual(view.derived.euStatus, { c0: "overdue", c1: null })
+	openCar(view, "c1")
+	view.handlers["edit-car"]()
+	assert.equal(model.inputs.car.euInspectionDue, "")
+	fillCar(view, { euInspectionDue: "2999-12-31" })
+	view.handlers["save-car"]()
+	assert.equal(model.data.cars[1].euInspectionDue, "2999-12-31")
+	assert.deepEqual(view.derived.euStatus, { c0: "overdue", c1: "ok" })
+	const stored = storedData(storage).cars[1]
+	assert.deepEqual(Object.keys(stored).sort(), Object.keys({ ...SAVED_CAR, id: "" }).sort())
 })
