@@ -295,3 +295,106 @@ test("Confirm deletes the car with its records and returns to the garage, and no
 	assert.equal(new URL(page.url()).hash, "")
 	await page.browserContext().close()
 })
+
+/* ----------------------------------------------------------------------
+   Mark the EU-kontroll done (#43). The Volvo's date is a month ahead of
+   today, so it starts due soon whatever day the tests run.
+   ---------------------------------------------------------------------- */
+
+function monthsAhead(months) {
+	const date = new Date()
+	date.setDate(15) // a day every month has
+	date.setMonth(date.getMonth() + months)
+	const pad = (n) => String(n).padStart(2, "0")
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-15`
+}
+
+const EU_DUE = monthsAhead(1)
+const EU_NEXT = monthsAhead(25)
+
+async function openVolvoWithEu() {
+	const cars = RECORDS.cars.map((car) =>
+		car.id === "c0" ? { ...car, euInspectionDue: EU_DUE } : car
+	)
+	const page = await openGarage({ ...RECORDS, cars })
+	await page.click("[data-action='open-car'][data-id='c0']")
+	await waitForH1(page, "Volvo V70")
+	return page
+}
+
+const euDialogOpen = (page) => page.$eval("#eu-done-dialog", (el) => el.open)
+const euStatus = (page) => page.$eval("#main .eu-status", (el) => el.dataset.status)
+const setNextDue = (page, value) =>
+	page.$eval(
+		"#eu-done-nextDue",
+		(el, v) => {
+			el.value = v
+			el.dispatchEvent(new Event("input", { bubbles: true }))
+		},
+		value
+	)
+
+test("Mark done suggests the old date plus two years, and Save stores it and updates the status", async () => {
+	const page = await openVolvoWithEu()
+	assert.equal(await euStatus(page), "dueSoon")
+	await page.click("#mark-eu-done")
+	assert.equal(await euDialogOpen(page), true)
+	assert.equal(await focusedId(page), "eu-done-nextDue")
+	assert.equal(await page.$eval("#eu-done-nextDue", (el) => el.value), EU_NEXT)
+
+	await page.click("#eu-done-dialog button[type='submit'][form='eu-done-form']")
+	await page.waitForFunction(() => !document.querySelector("#eu-done-dialog")?.open)
+	assert.equal(await focusedId(page), "mark-eu-done")
+	assert.equal((await saved(page)).cars[0].euInspectionDue, EU_NEXT)
+	assert.equal(await euStatus(page), "ok")
+
+	await page.reload({ waitUntil: "networkidle0" })
+	await waitForH1(page, "Volvo V70")
+	assert.equal(await euStatus(page), "ok")
+	await page.browserContext().close()
+})
+
+test("Mark done saves a date the user changed, and Enter in the field saves too", async () => {
+	const page = await openVolvoWithEu()
+	await page.click("#mark-eu-done")
+	await setNextDue(page, "2028-06-01")
+	await page.focus("#eu-done-nextDue")
+	await page.keyboard.press("Enter")
+	await page.waitForFunction(() => !document.querySelector("#eu-done-dialog")?.open)
+	assert.equal((await saved(page)).cars[0].euInspectionDue, "2028-06-01")
+	await page.browserContext().close()
+})
+
+test("An empty date shows an error in the open dialog; Escape and Cancel change nothing", async () => {
+	const page = await openVolvoWithEu()
+	const before = await saved(page)
+	await page.click("#mark-eu-done")
+	await setNextDue(page, "")
+	await page.click("#eu-done-dialog button[type='submit'][form='eu-done-form']")
+	await page.waitForSelector("#eu-done-nextDue-error")
+	assert.equal(
+		await page.$eval("#eu-done-nextDue-error", (el) => el.textContent),
+		en["car.error.euDoneRequired"]
+	)
+	assert.equal(await euDialogOpen(page), true)
+	assert.equal(await focusedId(page), "eu-done-nextDue")
+	assert.deepEqual(await saved(page), before)
+
+	await page.keyboard.press("Escape")
+	assert.equal(await euDialogOpen(page), false)
+	assert.equal(await focusedId(page), "mark-eu-done")
+
+	await page.click("#mark-eu-done")
+	assert.equal(await page.$("#eu-done-nextDue-error"), null) // opens afresh
+	await page.click("#eu-done-dialog form[method='dialog'] button")
+	assert.equal(await euDialogOpen(page), false)
+	assert.deepEqual(await saved(page), before)
+	await page.browserContext().close()
+})
+
+test("A car with no EU-kontroll date has no Mark done button", async () => {
+	const page = await openVolvo()
+	assert.equal(await page.$("#mark-eu-done"), null)
+	assert.equal(await page.$("#eu-done-dialog"), null)
+	await page.browserContext().close()
+})

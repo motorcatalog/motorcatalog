@@ -815,10 +815,11 @@ test("the car page offers Mark done, Edit and Delete on one row, each named by i
 	assert.equal(buttons[0].id, "mark-eu-done") // focus comes back here after the dialog
 	assert.ok(buttons[2].classList.contains("btn-danger"))
 	const nb = mount(carScreen({ lang: "nb" })).main.querySelector(".car-actions")
-	assert.deepEqual(
-		[...nb.querySelectorAll("button")].map(words),
-		["Marker EU-kontroll som utført", "Rediger bil", "Slett bil"]
-	)
+	assert.deepEqual([...nb.querySelectorAll("button")].map(words), [
+		"Marker EU-kontroll som utført",
+		"Rediger bil",
+		"Slett bil",
+	])
 })
 
 test("a car without an EU-kontroll date has neither Mark done nor its dialog", () => {

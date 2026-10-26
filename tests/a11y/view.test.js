@@ -189,6 +189,23 @@ const PAGES = {
 		selected: "c1",
 		dialog: "delete-car-dialog",
 	},
+	"a car page with the Mark done dialog open": {
+		page: "car",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		selected: "c1",
+		dialog: "eu-done-dialog",
+	},
+	"the Mark done dialog with an error": {
+		page: "car",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		selected: "c1",
+		errors: { nextDue: "car.error.euDoneRequired" },
+		dialog: "eu-done-dialog",
+	},
 	"a car page for a car that is gone": {
 		page: "car",
 		profiles: ["Malin"],
