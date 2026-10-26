@@ -60,6 +60,46 @@ main h1[tabindex="-1"]:focus {
 	overflow-wrap: anywhere;
 }
 
+/* The reminders at the top of the garage: one row per car. Dismiss sits
+   beside the text when there is room and under it on a phone. Rows sit
+   apart on a rule, like the history. */
+.eu-reminders h2 {
+	font-size: var(--text-lg);
+	font-weight: 600;
+}
+.eu-reminders ul {
+	list-style: none;
+	padding: 0;
+	margin-top: var(--space-2);
+}
+.eu-reminder {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding-block: var(--space-3);
+	border-top: 1px solid var(--line);
+}
+.eu-reminder:last-child {
+	padding-bottom: 0;
+}
+.eu-reminder-text {
+	flex: 1 1 14rem;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-1) var(--space-3);
+	min-width: 0;
+}
+.eu-reminder-text a {
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+.eu-reminder .btn {
+	flex: none;
+}
+
 /* The garage: one card per car. One column on a phone, two from 768 px,
    three from 1024 px. */
 .car-list {

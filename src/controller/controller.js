@@ -279,6 +279,41 @@ export function euInspectionStatus(due, today, months) {
 	return today >= addMonths(due, -months) ? "dueSoon" : "ok"
 }
 
+// The Monday on or before a stored YYYY-MM-DD.
+function mondayOnOrBefore(date) {
+	const day = new Date(`${date}T00:00:00Z`)
+	day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7))
+	return day.toISOString().slice(0, 10)
+}
+
+// The start date of the EU-kontroll reminder that is current on `today`
+// (docs/design/data-model.md, EU-kontroll reminders), or null when none is.
+// Reminders start `months`, ..., 2 and 1 calendar months before the date,
+// then every Monday after the 1-month one until the inspection is marked
+// done, also after the date. The current one is the latest start so far,
+// so a date set late or already passed shows a reminder at once.
+export function currentEuReminder(due, today, months) {
+	if (typeof due !== "string" || !isValidDate(due)) return null
+	const oneMonth = addMonths(due, -1)
+	if (today >= oneMonth) {
+		const monday = mondayOnOrBefore(today)
+		return monday > oneMonth ? monday : oneMonth
+	}
+	for (let m = 2; m <= months; m++) {
+		const start = addMonths(due, -m)
+		if (today >= start) return start
+	}
+	return null
+}
+
+// A car's current reminder shows unless it was dismissed. The car keeps
+// the start of the dismissed one, and every later reminder starts later.
+export function euReminderShows(car, today, months) {
+	const start = currentEuReminder(car.euInspectionDue, today, months)
+	const dismissed = car.euReminderDismissed
+	return start !== null && !(typeof dismissed === "string" && dismissed >= start)
+}
+
 // The next EU-kontroll date that Mark done suggests: the old date plus
 // `months`. An inspection done up to 2 months early keeps the old date as
 // its base, so the suggestion never counts from today.
@@ -497,6 +532,7 @@ export function createController({ model, view, i18n, config, languages }) {
 				model.inputs.euDone.nextDue = target.value
 			},
 			"save-eu-done": saveEuDone,
+			"dismiss-eu-reminder": (_event, target) => dismissEuReminder(target.dataset.id),
 			// actionName: (event, target) => { change model, then render() }
 		})
 		globalThis.addEventListener?.("popstate", (event) => {
@@ -517,7 +553,7 @@ export function createController({ model, view, i18n, config, languages }) {
 	// then redraw.
 	function render() {
 		const today = localDateString()
-		const cars = model.data.cars.filter((c) => c.profileId === model.data.activeProfileId)
+		const cars = ownCars()
 		const derived = {
 			...resolvePreferences(model.app.preferences),
 			profile: activeProfile(model.data),
@@ -529,6 +565,11 @@ export function createController({ model, view, i18n, config, languages }) {
 					euInspectionStatus(c.euInspectionDue, today, config.euDueSoonMonths),
 				])
 			),
+			// The garage lists these at the top, in garage order.
+			euReminders: remindedCars(cars, today).map((c) => ({
+				car: c,
+				status: euInspectionStatus(c.euInspectionDue, today, config.euDueSoonMonths),
+			})),
 		}
 		if (Object.hasOwn(CAR_PAGES, model.app.page)) {
 			derived.selectedCar = ownCar(model.app.selectedCarId)
@@ -639,12 +680,14 @@ export function createController({ model, view, i18n, config, languages }) {
 			return
 		}
 		if (edited) {
+			// A new EU-kontroll date starts its reminders fresh.
+			if (car.euInspectionDue !== edited.euInspectionDue) edited.euReminderDismissed = null
 			Object.assign(edited, car)
 			saveData(model.data)
 			leaveCarPage("carForm", "car")
 			return
 		}
-		model.data.cars.push({ id: crypto.randomUUID(), profileId, ...car })
+		model.data.cars.push({ id: crypto.randomUUID(), profileId, ...car, euReminderDismissed: null })
 		saveData(model.data)
 		clearInputs()
 		go("garage")
@@ -701,11 +744,37 @@ export function createController({ model, view, i18n, config, languages }) {
 			return
 		}
 		car.euInspectionDue = date
+		car.euReminderDismissed = null // the new date starts fresh
 		saveData(model.data)
 		view.closeDialog("eu-done-dialog")
 		model.inputs.euDone.nextDue = ""
 		render()
 		view.focusField("mark-eu-done")
+	}
+
+	// Dismiss on a garage reminder: the car keeps the start of the current
+	// reminder, which hides it until the next one starts. Focus moves to
+	// the next reminder's Dismiss, or to the heading when none is left.
+	function dismissEuReminder(id) {
+		const car = ownCar(id)
+		const today = localDateString()
+		if (!car || !euReminderShows(car, today, config.euDueSoonMonths)) return
+		car.euReminderDismissed = currentEuReminder(car.euInspectionDue, today, config.euDueSoonMonths)
+		saveData(model.data)
+		render()
+		const [next] = remindedCars(ownCars(), today)
+		if (next) view.focusField(`dismiss-eu-${next.id}`)
+		else view.focusHeading()
+	}
+
+	// The active profile's cars, in the order they were added.
+	function ownCars() {
+		return model.data.cars.filter((c) => c.profileId === model.data.activeProfileId)
+	}
+
+	// The cars among `cars` whose EU-kontroll reminder shows on `today`.
+	function remindedCars(cars, today) {
+		return cars.filter((c) => euReminderShows(c, today, config.euDueSoonMonths))
 	}
 
 	// The active profile's car with this id, or null. Another profile's car

@@ -398,3 +398,55 @@ test("A car with no EU-kontroll date has no Mark done button", async () => {
 	assert.equal(await page.$("#eu-done-dialog"), null)
 	await page.browserContext().close()
 })
+
+/* ----------------------------------------------------------------------
+   EU-kontroll reminders on the garage (#42). EU_DUE is under three
+   months off, so the Volvo always has a reminder due.
+   ---------------------------------------------------------------------- */
+
+async function garageWithEu(fields = {}) {
+	const cars = RECORDS.cars.map((car) =>
+		car.id === "c0" ? { ...car, euInspectionDue: EU_DUE, ...fields } : car
+	)
+	return openGarage({ ...RECORDS, cars })
+}
+
+const reminderTexts = (page) =>
+	page.$$eval("#main .eu-reminder p", (ps) =>
+		ps.map((p) => p.textContent.replace(/\s+/g, " ").trim())
+	)
+
+test("The garage lists the due reminder, and Dismiss hides it, also after a reload", async () => {
+	const page = await garageWithEu()
+	const [text] = await reminderTexts(page)
+	assert.match(text, /^Volvo V70 EU inspection /)
+	assert.equal((await reminderTexts(page)).length, 1) // the Toyota has no date
+
+	await page.click("#dismiss-eu-c0")
+	assert.equal(await page.$("#main .eu-reminders"), null)
+	assert.equal(await focusedId(page), "h1")
+	assert.match((await saved(page)).cars[0].euReminderDismissed, /^\d{4}-\d{2}-\d{2}$/)
+	await page.reload({ waitUntil: "networkidle0" })
+	await waitForH1(page, en["garage.title"])
+	assert.equal(await page.$("#main .eu-reminders"), null)
+	await page.browserContext().close()
+})
+
+test("A reminder's car name opens the car, and Mark done clears a dismissed reminder", async () => {
+	const page = await garageWithEu({ euReminderDismissed: "2999-01-01" }) // hidden for now
+	assert.equal(await page.$("#main .eu-reminders"), null)
+	await page.click("[data-action='open-car'][data-id='c0']")
+	await waitForH1(page, "Volvo V70")
+	await page.click("#mark-eu-done")
+	await setNextDue(page, EU_DUE) // the same date, so only the clearing differs
+	await page.click("#eu-done-dialog button[type='submit'][form='eu-done-form']")
+	await page.waitForFunction(() => !document.querySelector("#eu-done-dialog")?.open)
+	assert.equal((await saved(page)).cars[0].euReminderDismissed, null)
+
+	await page.click("[data-action='back-garage']")
+	await waitForH1(page, en["garage.title"])
+	assert.equal((await reminderTexts(page)).length, 1)
+	await page.click("#main .eu-reminder a")
+	await waitForH1(page, "Volvo V70")
+	await page.browserContext().close()
+})

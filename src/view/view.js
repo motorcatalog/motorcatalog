@@ -140,11 +140,35 @@ export function createView({ header, main }, i18n, config) {
 				<h1 tabindex="-1">${esc(t("garage.title"))}</h1>
 				<button class="btn btn-primary" type="button" data-action="add-car">${icon("plus")}<span>${esc(t("garage.addCar"))}</span></button>
 			</div>
+			${derived.euReminders.length > 0 ? euReminders(derived, t) : ""}
 			${
 				cars.length === 0
 					? `<p class="garage-empty text-muted-foreground">${esc(t("garage.empty"))}</p>`
 					: `<ul class="car-list" role="list">${cars.map((car) => carCard(car, derived, t, km)).join("")}</ul>`
 			}`
+	}
+
+	// The reminders at the top of the garage (#42), one per car with an
+	// EU-kontroll due. The car's name opens its page, where Mark done is.
+	// Dismiss names its car for a screen reader, since every row has one.
+	function euReminders(derived, t) {
+		const rows = derived.euReminders.map(({ car, status }) => {
+			const title = esc(carTitle(car))
+			return `
+				<li class="eu-reminder">
+					<p class="eu-reminder-text">
+						<a href="#car-${esc(car.id)}" data-action="open-car" data-id="${esc(car.id)}">${title}</a>
+						<span>${esc(t("reminders.eu", { date: formatDate(car.euInspectionDue, derived.lang) }))}</span>
+						${euStatus(status, t)}
+					</p>
+					<button class="btn btn-ghost" type="button" id="dismiss-eu-${esc(car.id)}" data-action="dismiss-eu-reminder" data-id="${esc(car.id)}">${icon("close")}<span>${esc(t("reminders.dismiss"))}<span class="sr-only"> ${esc(t("reminders.dismissFor", { car: carTitle(car) }))}</span></span></button>
+				</li>`
+		})
+		return `
+			<section class="card eu-reminders" aria-labelledby="eu-reminders-title">
+				<h2 id="eu-reminders-title">${esc(t("reminders.title"))}</h2>
+				<ul role="list">${rows.join("")}</ul>
+			</section>`
 	}
 
 	// The car pages read the selected car and its history from derived. A

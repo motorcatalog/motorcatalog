@@ -46,6 +46,7 @@ erDiagram
     string engine "optional"
     number mileage
     string euInspectionDue "optional"
+    string euReminderDismissed "optional"
   }
   SERVICE_ENTRY {
     string id PK
@@ -97,6 +98,7 @@ A local profile that keeps one person's cars apart from another's on a shared de
 | `engine` | string or null | Optional free text, first letter in capitals, e.g. "4.0 V8" |
 | `mileage` | number | Whole km from 0 to 10 000 000. See [Mileage](#mileage) |
 | `euInspectionDue` | string or null | Optional. Date of the next EU inspection (EU-kontroll), from a native date input. A past date is allowed: the car is then overdue. Cars saved before the field existed lack it, and a missing value reads as null |
+| `euReminderDismissed` | string or null | The start date of the EU-kontroll reminder the user dismissed, or null. See [EU-kontroll reminders](#eu-kontroll-reminders). Cars saved before the field existed lack it, and a missing value reads as null, so `version` stays 1 |
 
 ### Service entry
 
@@ -222,7 +224,7 @@ When a task with `repeatMonths` or `repeatKm` is marked done:
 
 Mark done on the car page shows only when the car has an `euInspectionDue`. It opens a dialog with the next date filled in: the old date plus 24 calendar months (`euInspectionIntervalMonths` in `src/config.js`). The suggestion counts from the old date, never from today, because an EU-kontroll done up to 2 months early keeps its date. A day the month doesn't have becomes its last day, so 29.02.2028 suggests 28.02.2030.
 
-The user can change the date before saving. It must be a real date and can't be empty. A past date is allowed, as in the car form. Saving replaces `euInspectionDue`, and the status is worked out again from the new date.
+The user can change the date before saving. It must be a real date and can't be empty. A past date is allowed, as in the car form. Saving replaces `euInspectionDue`, and the status is worked out again from the new date. It also sets `euReminderDismissed` to null, so the new date's reminders start fresh. A new date saved in the car form does the same.
 
 ### Deleting
 
@@ -236,6 +238,7 @@ The controller works these out from the model each time it renders. They are nev
 |---|---|
 | The language, theme and currency in use | `app.preferences`: the choice, or the system value when nothing is chosen |
 | EU inspection status: OK, due soon or overdue | `euInspectionDue` compared with today (see [EU-kontroll status](#eu-kontroll-status)) |
+| The reminders at the top of the garage | Each of the garage's cars whose reminder is due and not dismissed (see [EU-kontroll reminders](#eu-kontroll-reminders)) |
 | Task status: open, due soon or overdue | `dueDate` and `dueMileage` compared with today and `car.mileage` |
 | Status line on a car card | The car's EU status and its most urgent open task |
 | Service history, filtered and newest first | `serviceEntries` for the car and `app.historyFilter` |
@@ -257,8 +260,19 @@ The 3 months are calendar months, set as `euDueSoonMonths` in `src/config.js`. W
 
 Every status shows as text with an icon, never colour alone. Only overdue is coloured, in the brand's danger red (`--danger-rgb` in `src/styles/palette.css`).
 
+### EU-kontroll reminders
+
+A car with an `euInspectionDue` gets reminders, listed at the top of the garage when the app opens. Only the active profile's cars show.
+
+1. A reminder starts 3, 2 and 1 calendar months before the date, with the same month rule as the status above.
+2. After the 1-month reminder, a new one starts every Monday until the EU-kontroll is marked done, also after the date has passed.
+3. The current reminder is the latest one that has started. A date set less than 3 months ahead, or one already passed, therefore shows a reminder at once.
+
+Dismiss stores the current reminder's start date in `euReminderDismissed`. A reminder shows when its start date is later than that, so a dismissed reminder stays hidden until the next one starts. Marking the EU-kontroll done sets the field to null.
+
 ## Not in v1
 
+- Push notifications for reminders. They need a server.
 - Car photos. Images stored as text would quickly fill localStorage's roughly 5 MB.
 - A separate mileage log, e.g. one reading per refuel.
 - EU inspection rolling forward by itself. The user marks it done, which suggests the next date (see [Marking the EU-kontroll done](#marking-the-eu-kontroll-done)).
