@@ -321,33 +321,35 @@ export function createView({ header, main }, i18n, config) {
 			<button class="btn btn-ghost car-back" type="button" data-action="cancel-service-entry">${backIcon()}<span>${esc(t("service.backToHistory"))}</span></button>
 			<h1 class="service-form-title" tabindex="-1">${esc(t("service.formTitle"))}</h1>
 			<p class="service-form-car text-muted-foreground">${esc(t("service.carSummary", { car: carName, year: car.year }))}</p>
-			<form class="stack service-form" data-submit="save-service-entry" novalidate>
-				${field("category", { type: "select", required: true })}
-				${field("title", {
-					required: true,
-					attrs: `placeholder="${esc(t("service.placeholder.title"))}" autocomplete="off"`,
-				})}
-				${field("date", { type: "date", required: true, attrs: `max="${esc(derived.today)}"` })}
-				${field("mileage", {
-					type: "number",
-					required: true,
-					attrs: `min="0" max="${config.carMileageMax}" step="1" inputmode="numeric"`,
-				})}
-				${field("cost", {
-					type: "number",
-					required: true,
-					attrs: 'min="0" step="1" inputmode="numeric"',
-				})}
-				${field("workshop", {
-					attrs: `placeholder="${esc(t("service.placeholder.workshop"))}" autocomplete="organization"`,
-				})}
-				${field("notes", {
-					type: "textarea",
-					attrs: `placeholder="${esc(t("service.placeholder.notes"))}"`,
-				})}
-				<div class="cluster service-form-actions">
-					<button class="btn btn-primary" type="submit">${esc(t("service.save"))}</button>
-					<button class="btn btn-ghost" type="button" data-action="cancel-service-entry">${esc(t("car.cancel"))}</button>
+			<form class="split-form service-form" data-submit="save-service-entry" novalidate>
+				<div class="split-form-body stack">
+					${field("category", { type: "select", required: true })}
+					${field("title", {
+						required: true,
+						attrs: `placeholder="${esc(t("service.placeholder.title"))}" autocomplete="off"`,
+					})}
+					${field("date", { type: "date", required: true, attrs: `max="${esc(derived.today)}"` })}
+					${field("mileage", {
+						type: "number",
+						required: true,
+						attrs: `min="0" max="${config.carMileageMax}" step="1" inputmode="numeric"`,
+					})}
+					${field("cost", {
+						type: "number",
+						required: true,
+						attrs: 'min="0" step="1" inputmode="numeric"',
+					})}
+					${field("workshop", {
+						attrs: `placeholder="${esc(t("service.placeholder.workshop"))}" autocomplete="organization"`,
+					})}
+					${field("notes", {
+						type: "textarea",
+						attrs: `placeholder="${esc(t("service.placeholder.notes"))}"`,
+					})}
+					<div class="cluster split-form-actions service-form-actions">
+						<button class="btn btn-primary" type="submit">${esc(t("service.save"))}</button>
+						<button class="btn btn-ghost" type="button" data-action="cancel-service-entry">${esc(t("car.cancel"))}</button>
+					</div>
 				</div>
 			</form>`
 	}
@@ -538,10 +540,10 @@ export function createView({ header, main }, i18n, config) {
 		const title = model.inputs.editingId ? "carForm.editTitle" : "carForm.title"
 		return `
 			<h1 tabindex="-1">${esc(t(title))}</h1>
-			<form class="car-form" data-submit="save-car" novalidate>
-				<div class="car-form-body stack">
+			<form class="split-form" data-submit="save-car" novalidate>
+				<div class="split-form-body stack">
 					${CAR_FIELDS.map((field) => carField(model, derived, t, field)).join("")}
-					<div class="cluster car-form-actions">
+					<div class="cluster split-form-actions">
 						<button class="btn btn-primary" type="submit">${esc(t("car.save"))}</button>
 						<button class="btn" type="button" data-action="cancel-car">${esc(t("car.cancel"))}</button>
 					</div>

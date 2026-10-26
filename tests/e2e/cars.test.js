@@ -262,7 +262,7 @@ test("Edit car fits a tablet screen with each label beside its input, and a phon
 	const layout = () =>
 		page.evaluate(() => ({
 			fits: document.documentElement.scrollHeight <= innerHeight,
-			rows: [...document.querySelectorAll(".car-form .field")].map((field) => {
+			rows: [...document.querySelectorAll(".split-form .field")].map((field) => {
 				const label = field.querySelector("label").getBoundingClientRect()
 				const control = field.querySelector("input, select").getBoundingClientRect()
 				return {

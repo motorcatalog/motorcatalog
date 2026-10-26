@@ -414,30 +414,36 @@ main h1[tabindex="-1"]:focus {
 	margin-top: var(--space-2);
 }
 
-/* The car form (Add car and Edit car). On a phone each label sits over
+/* The car form and the service form. On a phone each label sits over
    its input. Once the form itself is wide enough, the label moves to the
    left of the input, still one field per row, so the whole form fits on
    a tablet screen. A container query, not a media query: the form's own
    width decides, so a narrow pane on a wide screen keeps the stacked
-   layout. An error stays under the input, and the buttons line up with
-   the inputs. */
-.car-form {
+   layout. The query can't restyle the form it measures, so the fields
+   sit in .split-form-body. An error stays under the input, a textarea's
+   label lines up with its first line, and the buttons line up with the
+   inputs. */
+.split-form {
 	container-type: inline-size;
 }
 @container (min-width: 32rem) {
-	.car-form-body {
+	.split-form-body {
 		gap: var(--space-3);
 	}
-	.car-form .field {
+	.split-form .field {
 		display: grid;
 		grid-template-columns: 12rem minmax(0, 1fr);
 		align-items: center;
 		gap: var(--space-1) var(--space-4);
 	}
-	.car-form .field-error {
+	.split-form .field:has(.textarea) .label {
+		align-self: start;
+		padding-top: calc((2.75rem - 1lh) / 2);
+	}
+	.split-form .field-error {
 		grid-column: 2;
 	}
-	.car-form-actions {
+	.split-form-actions {
 		margin-left: calc(12rem + var(--space-4));
 	}
 }
