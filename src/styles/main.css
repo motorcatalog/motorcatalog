@@ -32,6 +32,12 @@ main h1[tabindex="-1"]:focus {
 	padding: 0;
 }
 
+/* Export, under a rule so it reads apart from the profile form above. */
+.profile-export {
+	padding-top: var(--space-5);
+	border-top: 1px solid var(--line);
+}
+
 /* The active profile, on its own row under the wordmark and the pickers. */
 .header-profile {
 	margin-top: var(--space-3);

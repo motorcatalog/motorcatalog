@@ -217,6 +217,22 @@ for (const [
 	})
 }
 
+// Export sits on both profiles pages (#26). Its button carries an icon,
+// so the name it gets from its text is checked in every language.
+for (const lang of Object.keys(bundles)) {
+	test(`the Export section has no axe violations and a named button (${lang})`, async () => {
+		dom = createMount(lang)
+		const view = createView({ header: dom.header, main: dom.mount }, i18n, MULTI_CURRENCY)
+		const { model, derived } = screenFor(lang)
+		model.app.page = "profiles"
+		view.renderHeader(model, derived)
+		view.render(model, derived)
+		const button = dom.mount.querySelector(".profile-export [data-action='export-data']")
+		assert.equal(button.textContent.trim(), bundles[lang]["export.button"])
+		assert.deepEqual(await axeComponent(dom.mount.querySelector(".profile-export")), [])
+	})
+}
+
 // Proves the harness reports real problems instead of passing silently.
 // A visible glyph counts as text, so the icon is hidden from assistive
 // technology the way a real icon would be; the button then has no name.

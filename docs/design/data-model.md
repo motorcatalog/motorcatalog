@@ -182,7 +182,7 @@ export const model = {
 - `model.data` is saved to localStorage as JSON under the single key `motorcatalog`.
 - The app still starts if that key is missing or broken. It then starts with the empty `data` above.
 - `version` lets a later release change the shape and migrate old data, and lets import check a file before loading it.
-- Export downloads `model.data` as a JSON file.
+- Export, on the profiles page, downloads `model.data` as a JSON file named by the local date, `motorcatalog-2026-10-26.json`.
 
 ## Formats
 

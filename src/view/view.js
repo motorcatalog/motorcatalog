@@ -76,14 +76,16 @@ export function createView({ header, main }, i18n, config) {
 	}
 
 	// The welcome page on a first visit; the picker once profiles exist.
-	// The create form is on both, so a second person can be added.
+	// The create form is on both, so a second person can be added. Export
+	// is on both too: it is the one page reachable with no data.
 	function profilesPage(model, _derived, t) {
 		const { profiles } = model.data
 		if (profiles.length === 0) {
 			return `
 				<h1 tabindex="-1">${esc(t("welcome.title"))}</h1>
 				<p class="text-muted-foreground">${esc(t("welcome.intro"))}</p>
-				${profileForm(model, t)}`
+				${profileForm(model, t)}
+				${exportSection(t)}`
 		}
 		const buttons = profiles.map(
 			(p) =>
@@ -92,7 +94,19 @@ export function createView({ header, main }, i18n, config) {
 		return `
 			<h1 tabindex="-1">${esc(t("profiles.title"))}</h1>
 			<ul class="profile-list stack stack-sm" role="list">${buttons.join("")}</ul>
-			${profileForm(model, t, t("profiles.new"))}`
+			${profileForm(model, t, t("profiles.new"))}
+			${exportSection(t)}`
+	}
+
+	// The file holds every profile on the device, not only one, so Export
+	// sits under its own heading after the profiles.
+	function exportSection(t) {
+		return `
+			<section class="profile-export stack stack-sm" aria-labelledby="export-title">
+				<h2 id="export-title" class="text-lg">${esc(t("export.title"))}</h2>
+				<p class="text-muted-foreground">${esc(t("export.text"))}</p>
+				<div><button class="btn" type="button" data-action="export-data">${downloadIcon()}<span>${esc(t("export.button"))}</span></button></div>
+			</section>`
 	}
 
 	// novalidate: the error is our own text under the field, not the
@@ -374,6 +388,10 @@ export function createView({ header, main }, i18n, config) {
 
 	function deleteIcon() {
 		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
+	}
+
+	function downloadIcon() {
+		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v11m-5-5 5 5 5-5"/><path d="M5 20h14"/></svg>'
 	}
 
 	function vehicleIcon() {
@@ -674,6 +692,21 @@ export function createView({ header, main }, i18n, config) {
 		main.querySelector(`#${id}`)?.close()
 	}
 
+	// Export: the file goes to the browser as a download through a hidden
+	// link that lives only for the click. The link reads its blob URL when
+	// it is clicked, so the URL can be revoked straight after.
+	function downloadFile({ name, type, text }) {
+		const url = URL.createObjectURL(new Blob([text], { type }))
+		const link = main.ownerDocument.createElement("a")
+		link.href = url
+		link.download = name
+		link.hidden = true
+		main.append(link)
+		link.click()
+		link.remove()
+		URL.revokeObjectURL(url)
+	}
+
 	// A new make or country while the car form is open: the model
 	// suggestions and the plate example change without a redraw, so
 	// nothing typed and no focus is lost.
@@ -720,6 +753,7 @@ export function createView({ header, main }, i18n, config) {
 		focusField,
 		openDialog,
 		closeDialog,
+		downloadFile,
 		setFieldValue,
 		updateCarForm,
 		bindActions,

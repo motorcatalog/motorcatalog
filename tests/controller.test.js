@@ -15,6 +15,7 @@ import {
 	carFormHints,
 	carHistory,
 	createController,
+	exportFile,
 	loadData,
 	resolveCountry,
 	resolvePreferences,
@@ -67,6 +68,7 @@ function fakeView() {
 		corrected: [],
 		carForms: [],
 		dialogs: [],
+		downloads: [],
 		handlers: {},
 		derived: null,
 		render(_model, derived) {
@@ -81,6 +83,7 @@ function fakeView() {
 		updateCarForm: (hints) => view.carForms.push(hints),
 		openDialog: (id) => view.dialogs.push(`open ${id}`),
 		closeDialog: (id) => view.dialogs.push(`close ${id}`),
+		downloadFile: (file) => view.downloads.push(file),
 		bindActions: (handlers) => Object.assign(view.handlers, handlers),
 	}
 	return view
@@ -1476,4 +1479,53 @@ test("without the history API, Cancel and Save return to the car page and Delete
 	assert.equal(model.app.page, "garage")
 	assert.equal(model.app.selectedCarId, null)
 	assert.deepEqual(ids(model.data.cars), ["c1", "c9"])
+})
+
+// ---- Export (#26) ----
+
+test("exportFile names the file by the local date and holds the data as JSON with its version", () => {
+	const data = JSON.parse(dataWith(["Malin"]))
+	// Half past midnight local time is still the day before in UTC east
+	// of Greenwich, so a UTC date would name the wrong day.
+	const file = exportFile(data, new Date(2026, 9, 27, 0, 30))
+	assert.equal(file.name, "motorcatalog-2026-10-27.json")
+	assert.equal(exportFile(data, new Date(2026, 0, 5, 23, 59)).name, "motorcatalog-2026-01-05.json")
+	assert.equal(file.type, "application/json")
+	assert.deepEqual(JSON.parse(file.text), data)
+	assert.equal(JSON.parse(file.text).version, 1)
+	assert.ok(file.text.endsWith("}\n"))
+})
+
+test("Export with nothing saved downloads an empty but valid file and changes nothing", () => {
+	const storage = fakeStorage()
+	const { model, view } = boot(storage)
+	const renders = view.renders
+	view.handlers["export-data"]()
+	assert.equal(view.downloads.length, 1)
+	const [file] = view.downloads
+	assert.match(file.name, /^motorcatalog-\d{4}-\d{2}-\d{2}\.json$/)
+	assert.deepEqual(JSON.parse(file.text), {
+		version: 1,
+		activeProfileId: null,
+		profiles: [],
+		cars: [],
+		serviceEntries: [],
+		tasks: [],
+	})
+	assert.equal(model.app.page, "profiles")
+	assert.equal(view.renders, renders) // no redraw, so focus stays on Export
+	assert.deepEqual(storage.items, {})
+})
+
+test("Export holds every profile on the device with their cars, service entries and tasks", () => {
+	const storage = garageWithRecords()
+	const { model, view } = boot(storage)
+	view.handlers["switch-profile"]()
+	view.handlers["export-data"]()
+	const exported = JSON.parse(view.downloads[0].text)
+	assert.deepEqual(exported, model.data)
+	assert.deepEqual(exported, storedData(storage))
+	assert.deepEqual(ids(exported.cars), ["c0", "c1", "c9"]) // another profile's car too
+	assert.deepEqual(ids(exported.serviceEntries), ["a", "b"])
+	assert.deepEqual(ids(exported.tasks), ["t0", "t1"])
 })
