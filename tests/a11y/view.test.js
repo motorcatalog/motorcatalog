@@ -13,7 +13,12 @@
 import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
 import { createTranslator } from "../../i18n/index.js"
-import { carFormHints, carHistory, resolvePreferences } from "../../src/controller/controller.js"
+import {
+	carFormHints,
+	carHistory,
+	euInspectionStatus,
+	resolvePreferences,
+} from "../../src/controller/controller.js"
 import { bundles, FALLBACK_LANG } from "../../src/locales/index.js"
 import { model as initialModel } from "../../src/model/model.js"
 import { createView } from "../../src/view/view.js"
@@ -76,7 +81,14 @@ const CAR = {
 }
 const CARS = [
 	{ ...CAR, id: "c0" },
-	{ ...CAR, id: "c1", nickname: "Weekend car", vin: "YV1SW61R021234567", engine: "2.4 D5" },
+	{
+		...CAR,
+		id: "c1",
+		nickname: "Weekend car",
+		vin: "YV1SW61R021234567",
+		engine: "2.4 D5",
+		euInspectionDue: "2026-10-01", // overdue, the one status in colour
+	},
 ]
 
 // Two entries for the second car: one bare, one with every optional field.
@@ -201,6 +213,9 @@ for (const [
 		model.inputs.editingId = editing
 		derived.profile = model.data.profiles[active] ?? null
 		derived.cars = cars
+		derived.euStatus = Object.fromEntries(
+			cars.map((c) => [c.id, euInspectionStatus(c.euInspectionDue, "2026-10-26", 3)])
+		)
 		if (page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		if (selected) {
 			model.app.selectedCarId = selected

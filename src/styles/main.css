@@ -404,3 +404,30 @@ main h1[tabindex="-1"]:focus {
 		width: auto;
 	}
 }
+
+/* An EU-kontroll date and its status. The status is text with an icon,
+   so it never relies on colour. Only overdue is coloured: the brand's
+   danger red. OK and due soon keep the text colour. */
+.car-card-eu {
+	grid-column: 1 / -1;
+}
+.car-card-eu dd {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-1) var(--space-3);
+}
+.eu-status {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	color: var(--text);
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+.eu-status .icon {
+	flex: none;
+}
+.eu-status[data-status="overdue"] {
+	color: var(--danger);
+}

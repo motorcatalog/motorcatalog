@@ -143,7 +143,7 @@ export function createView({ header, main }, i18n, config) {
 			${
 				cars.length === 0
 					? `<p class="garage-empty text-muted-foreground">${esc(t("garage.empty"))}</p>`
-					: `<ul class="car-list" role="list">${cars.map((car) => carCard(car, t, km)).join("")}</ul>`
+					: `<ul class="car-list" role="list">${cars.map((car) => carCard(car, derived, t, km)).join("")}</ul>`
 			}`
 	}
 
@@ -176,10 +176,10 @@ export function createView({ header, main }, i18n, config) {
 			...(car.vin ? [["car.detail.vin", car.vin]] : []),
 			...(car.engine ? [["car.detail.engine", car.engine]] : []),
 		]
-		const stat = (iconHtml, label, value, { unit = "", valueClass = "" } = {}) => `
+		const stat = (iconHtml, label, value, { unit = "", valueClass = "", after = "" } = {}) => `
 				<div class="card car-stat-card">
 					${iconHtml}
-					<div class="stat"><span class="stat-label">${esc(t(label))}</span> <span class="stat-value ${valueClass}">${esc(value)}</span>${unit ? ` <span class="car-stat-unit">${esc(unit)}</span>` : ""}</div>
+					<div class="stat"><span class="stat-label">${esc(t(label))}</span> <span class="stat-value ${valueClass}">${esc(value)}</span>${unit ? ` <span class="car-stat-unit">${esc(unit)}</span>` : ""}${after ? ` ${after}` : ""}</div>
 				</div>`
 		const total = formatMoney(derived.history.totalCost, derived.lang)
 		return `
@@ -196,7 +196,10 @@ export function createView({ header, main }, i18n, config) {
 			</dl>
 			<div class="car-detail-stats">
 				${stat(meterIcon(), "car.odometer", km, { unit: t("car.kilometres") })}
-				${stat(icon("calendar"), "car.euInspection", inspection, { valueClass: "car-inspection-value" })}
+				${stat(icon("calendar"), "car.euInspection", inspection, {
+					valueClass: "car-inspection-value",
+					after: euStatus(derived.euStatus[car.id], t),
+				})}
 			</div>
 			<a class="card car-link" href="#history-${esc(car.id)}" data-action="open-history" data-id="${esc(car.id)}">
 				${icon("calendar")}<span class="car-link-copy"><strong>${esc(t("car.serviceRecords"))}</strong> <span>${esc(t("car.totalSpent", { cost: total }))}</span></span>
@@ -354,6 +357,19 @@ export function createView({ header, main }, i18n, config) {
 			</li>`
 	}
 
+	// An EU-kontroll status as text with an icon, never colour alone. The
+	// controller works it out; none means the car has no date.
+	const EU_STATUS_ICONS = {
+		ok: () => icon("check", { size: 16 }),
+		dueSoon: clockIcon,
+		overdue: warningIcon,
+	}
+
+	function euStatus(status, t) {
+		if (!status) return ""
+		return `<span class="eu-status" data-status="${status}">${EU_STATUS_ICONS[status]()}<span>${esc(t(`euStatus.${status}`))}</span></span>`
+	}
+
 	// Costs are stored as whole kroner in the base currency. The language
 	// decides the layout: "NOK 1,200" in English, "1 200 kr" in Norwegian.
 	function formatMoney(amount, lang) {
@@ -390,6 +406,14 @@ export function createView({ header, main }, i18n, config) {
 		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>'
 	}
 
+	function clockIcon() {
+		return '<svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+	}
+
+	function warningIcon() {
+		return '<svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.3 4.2 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4M12 17h.01"/></svg>'
+	}
+
 	function downloadIcon() {
 		return '<svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v11m-5-5 5 5 5-5"/><path d="M5 20h14"/></svg>'
 	}
@@ -401,9 +425,10 @@ export function createView({ header, main }, i18n, config) {
 	// One car. The title is the card's only link, and main.css stretches it
 	// over the whole card, so a screen reader hears the car's name and not
 	// every line of the card. A nickname takes the title, and make and model
-	// move to the line under it. The VIN shows only when there is one, on
-	// its own row under the registration number and the odometer.
-	function carCard(car, t, km) {
+	// move to the line under it. The VIN and the EU-kontroll show only when
+	// set, each on its own row under the registration number and the odometer.
+	function carCard(car, derived, t, km) {
+		const status = derived.euStatus[car.id]
 		const makeModel = `${car.make} ${car.model}`
 		const fact = (label, value, cls = "") =>
 			`<div${cls && ` class="${cls}"`}><dt>${esc(t(label))}</dt><dd>${esc(value)}</dd></div>`
@@ -416,8 +441,17 @@ export function createView({ header, main }, i18n, config) {
 					${fact("garage.regNumber", car.regNumber)}
 					${fact("garage.mileage", t("garage.km", { km: km.format(car.mileage) }))}
 					${car.vin ? fact("garage.vin", car.vin, "car-card-vin") : ""}
+					${status ? euFact(car, status, derived.lang, t) : ""}
 				</dl>
 			</li>`
+	}
+
+	function euFact(car, status, lang, t) {
+		return `
+			<div class="car-card-eu">
+				<dt>${esc(t("car.euInspection"))}</dt>
+				<dd><time datetime="${esc(car.euInspectionDue)}">${esc(formatDate(car.euInspectionDue, lang))}</time> ${euStatus(status, t)}</dd>
+			</div>`
 	}
 
 	// The car form's fields in form order (docs/design/data-model.md, Car).
@@ -425,7 +459,8 @@ export function createView({ header, main }, i18n, config) {
 	// ones carry the required attribute. Year and odometer are text with a
 	// number keyboard: type="number" lets "e", "+", "-" and "." through, and
 	// the controller keeps them to digits as they are typed. Every field but
-	// fuel shows a short example until something is typed (car.placeholder.*).
+	// fuel and the date shows a short example until something is typed
+	// (car.placeholder.*). A date input draws its own day, month and year.
 	// The label stays above it, so the field is still named once it is filled.
 	const CAR_FIELDS = [
 		{ name: "nickname", attrs: `maxlength="${config.carNicknameMax}"` },
@@ -438,6 +473,7 @@ export function createView({ header, main }, i18n, config) {
 		{ name: "fuel", type: "select" },
 		{ name: "engine" },
 		{ name: "mileage", required: true, attrs: 'inputmode="numeric"' },
+		{ name: "euInspectionDue", type: "date" },
 	]
 
 	// novalidate: each error is our own text under its field, the same way
@@ -502,8 +538,9 @@ export function createView({ header, main }, i18n, config) {
 								`<option value="${esc(fuel)}"${fuel === value ? " selected" : ""}>${esc(t(`fuel.${fuel}`))}</option>`
 						)
 						.join("")}</select>`
-				: `<input class="input" type="${type}" autocomplete="off" ${shared} value="${esc(value)}"
-						placeholder="${esc(placeholder(t, name, plate))}" />`
+				: `<input class="input" type="${type}" autocomplete="off" ${shared} value="${esc(value)}"${
+						type === "date" ? "" : ` placeholder="${esc(placeholder(t, name, plate))}"`
+					} />`
 		const vars = {
 			max: config.carNicknameMax,
 			min: config.carYearMin,

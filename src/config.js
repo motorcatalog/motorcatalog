@@ -24,4 +24,6 @@ export const config = Object.freeze({
 	carNicknameMax: 40,
 	carYearMin: 1900,
 	carMileageMax: 10_000_000,
+	// An EU-kontroll is due soon this many calendar months before its date.
+	euDueSoonMonths: 3,
 })

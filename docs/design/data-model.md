@@ -96,7 +96,7 @@ A local profile that keeps one person's cars apart from another's on a shared de
 | `fuel` | string | One of `petrol`, `diesel`, `electric`, `hybrid`, `other` |
 | `engine` | string or null | Optional free text, first letter in capitals, e.g. "4.0 V8" |
 | `mileage` | number | Whole km from 0 to 10 000 000. See [Mileage](#mileage) |
-| `euInspectionDue` | string or null | Date of the next EU inspection (EU-kontroll) |
+| `euInspectionDue` | string or null | Optional. Date of the next EU inspection (EU-kontroll), from a native date input. A past date is allowed: the car is then overdue. Cars saved before the field existed lack it, and a missing value reads as null |
 
 ### Service entry
 
@@ -228,12 +228,27 @@ The controller works these out from the model each time it renders. They are nev
 | Value | Worked out from |
 |---|---|
 | The language, theme and currency in use | `app.preferences`: the choice, or the system value when nothing is chosen |
-| EU inspection status: OK, due soon or overdue | `euInspectionDue` compared with today |
+| EU inspection status: OK, due soon or overdue | `euInspectionDue` compared with today (see [EU-kontroll status](#eu-kontroll-status)) |
 | Task status: open, due soon or overdue | `dueDate` and `dueMileage` compared with today and `car.mileage` |
 | Status line on a car card | The car's EU status and its most urgent open task |
 | Service history, filtered and newest first | `serviceEntries` for the car and `app.historyFilter` |
 | Cost totals per category and year | `cost` summed by `category` for `app.costsYear` |
 | The cars in the garage | `cars` where `profileId` is `activeProfileId` |
+
+### EU-kontroll status
+
+Worked out per car from `euInspectionDue` and today's local date each time a page renders.
+
+| Status | When |
+|---|---|
+| Overdue | Today is after the date |
+| Due soon | Today is on or after the date 3 calendar months before, up to and including the date itself |
+| OK | Before that |
+| None | No date, so no status shows |
+
+The 3 months are calendar months, set as `euDueSoonMonths` in `src/config.js`. When the day doesn't exist in the month three months back, that month's last day counts. A date of 31.01.2027 is due soon from 31.10.2026, and 31.05 is due soon from 28.02 (29.02 in a leap year).
+
+Every status shows as text with an icon, never colour alone. Only overdue is coloured, in the brand's danger red (`--danger-rgb` in `src/styles/palette.css`).
 
 ## Not in v1
 

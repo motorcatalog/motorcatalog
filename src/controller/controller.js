@@ -5,7 +5,8 @@
    HTML: that is the view's job.
 
    Derived values (the lang, theme and currency in use, the profile's
-   cars, and on a car's pages that car and its history) are worked out
+   cars and their EU-kontroll status, and on a car's pages that car and
+   its history) are worked out
    on every render and handed to the view beside the model. They are
    never stored, so they never go stale.
 
@@ -217,6 +218,8 @@ export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax, mile
 		vin: car.vin === null || VIN.test(car.vin),
 		fuel: fuels.includes(car.fuel),
 		mileage: WHOLE_NUMBER.test(inputs.mileage.trim()) && car.mileage <= mileageMax,
+		// A past date is fine: the car is then overdue.
+		euInspectionDue: car.euInspectionDue === null || isValidDate(car.euInspectionDue),
 	}
 	// A field is true when fine, false for its usual error, or another key.
 	const errors = Object.fromEntries(
@@ -251,6 +254,28 @@ function isValidDate(value) {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
 	const date = new Date(`${value}T00:00:00Z`)
 	return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
+// A stored YYYY-MM-DD moved `months` calendar months back. A day the
+// month doesn't have becomes its last day: 31.05 minus three is 28.02.
+function monthsBefore(date, months) {
+	const [year, month, day] = date.split("-").map(Number)
+	const target = new Date(Date.UTC(year, month - 1 - months, 1))
+	const lastDay = new Date(
+		Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)
+	).getUTCDate()
+	target.setUTCDate(Math.min(day, lastDay))
+	return target.toISOString().slice(0, 10)
+}
+
+// A car's EU-kontroll status on `today` (docs/design/data-model.md, EU-kontroll
+// status): "ok", "dueSoon" from `months` calendar months before the date up
+// to the date itself, "overdue" after it. Null without a real date, which
+// covers cars saved before the field existed. ISO dates compare as text.
+export function euInspectionStatus(due, today, months) {
+	if (typeof due !== "string" || !isValidDate(due)) return null
+	if (today > due) return "overdue"
+	return today >= monthsBefore(due, months) ? "dueSoon" : "ok"
 }
 
 function dateCheck(date, today) {
@@ -465,10 +490,19 @@ export function createController({ model, view, i18n, config, languages }) {
 	// Every change to the model ends here: work out the derived values,
 	// then redraw.
 	function render() {
+		const today = localDateString()
+		const cars = model.data.cars.filter((c) => c.profileId === model.data.activeProfileId)
 		const derived = {
 			...resolvePreferences(model.app.preferences),
 			profile: activeProfile(model.data),
-			cars: model.data.cars.filter((c) => c.profileId === model.data.activeProfileId),
+			cars,
+			// Per car id. The selected car is one of these cars too.
+			euStatus: Object.fromEntries(
+				cars.map((c) => [
+					c.id,
+					euInspectionStatus(c.euInspectionDue, today, config.euDueSoonMonths),
+				])
+			),
 		}
 		if (Object.hasOwn(CAR_PAGES, model.app.page)) {
 			derived.selectedCar = ownCar(model.app.selectedCarId)
@@ -478,7 +512,7 @@ export function createController({ model, view, i18n, config, languages }) {
 				model.app.historyFilter
 			)
 		}
-		if (model.app.page === "serviceForm") derived.today = localDateString()
+		if (model.app.page === "serviceForm") derived.today = today
 		if (model.app.page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		view.render(model, derived)
 		syncHeader(derived)
