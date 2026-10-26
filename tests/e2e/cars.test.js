@@ -31,18 +31,19 @@ after(async () => {
 })
 
 // A fresh page in English with one profile, so it opens on the garage.
-async function openGarage() {
+// `lists` seeds cars, service entries and tasks; empty by default.
+async function openGarage(lists = {}) {
 	const context = await browser.createBrowserContext()
 	const page = await context.newPage()
-	await page.evaluateOnNewDocument(() => {
+	await page.evaluateOnNewDocument((seed) => {
 		localStorage.setItem("lang", "en")
 		if (localStorage.getItem("motorcatalog")) return // keep what a test saved
 		const data = { version: 1, activeProfileId: "p0", profiles: [{ id: "p0", name: "Malin" }] }
 		localStorage.setItem(
 			"motorcatalog",
-			JSON.stringify({ ...data, cars: [], serviceEntries: [], tasks: [] })
+			JSON.stringify({ ...data, cars: [], serviceEntries: [], tasks: [], ...seed })
 		)
-	})
+	}, lists)
 	await page.goto(origin, { waitUntil: "networkidle0" })
 	await page.waitForSelector("#main h1")
 	await page.bringToFront()
@@ -154,5 +155,143 @@ test("fields fix what is typed in place and keep the caret", async () => {
 	await page.keyboard.type("Mercedes-Benz")
 	const models = await page.$$eval("#car-models option", (os) => os.map((o) => o.value))
 	assert.ok(models.includes("C63 AMG"))
+	await page.browserContext().close()
+})
+
+/* ----------------------------------------------------------------------
+   Edit and delete a car (#25). Two saved cars, each with one service
+   entry and one task, so a delete can be seen to take only its own.
+   ---------------------------------------------------------------------- */
+
+const CAR = {
+	profileId: "p0",
+	nickname: null,
+	make: "Volvo",
+	model: "V70",
+	year: 2008,
+	regCountry: "NO",
+	regNumber: "AB12345",
+	vin: null,
+	fuel: "diesel",
+	engine: null,
+	mileage: 184000,
+	euInspectionDue: null,
+}
+const entry = (id, carId) => ({
+	id,
+	carId,
+	category: "service",
+	title: "Oil change",
+	date: "2026-01-10",
+	mileage: 180000,
+	cost: 1450,
+	workshop: null,
+	notes: null,
+})
+const RECORDS = {
+	cars: [
+		{ ...CAR, id: "c0" },
+		{ ...CAR, id: "c1", make: "Toyota", model: "Corolla" },
+	],
+	serviceEntries: [entry("e0", "c0"), entry("e1", "c1")],
+	tasks: [
+		{ id: "t0", carId: "c0", title: "Change tyres" },
+		{ id: "t1", carId: "c1", title: "Wash" },
+	],
+}
+
+const saved = (page) => page.evaluate(() => JSON.parse(localStorage.getItem("motorcatalog")))
+const ids = (list) => list.map((item) => item.id)
+const dialogOpen = (page) => page.$eval("#delete-car-dialog", (el) => el.open)
+const focusedText = (page) => page.evaluate(() => document.activeElement?.textContent.trim())
+const h1Text = (page) => page.$eval("#main h1", (el) => el.textContent.trim())
+
+async function openVolvo() {
+	const page = await openGarage(RECORDS)
+	await page.click("[data-action='open-car'][data-id='c0']")
+	await waitForH1(page, "Volvo V70")
+	return page
+}
+
+async function openEdit(page) {
+	await page.click("[data-action='edit-car']")
+	await waitForH1(page, en["carForm.editTitle"])
+}
+
+test("Edit opens the filled form, and Save updates the car and returns to its page", async () => {
+	const page = await openVolvo()
+	await openEdit(page)
+	assert.equal(await focusedId(page), "h1")
+	assert.equal(new URL(page.url()).hash, "#edit-car-c0")
+	const value = (id) => page.$eval(id, (el) => el.value)
+	assert.equal(await value("#car-make"), "Volvo")
+	assert.equal(await value("#car-regCountry"), "Norway")
+	assert.equal(await value("#car-regNumber"), "AB12345")
+	assert.equal(await value("#car-fuel"), "diesel")
+	assert.equal(await value("#car-mileage"), "184000")
+
+	await page.click("#car-mileage", { count: 3 })
+	await page.keyboard.type("150000") // lower than before, which only an edit allows
+	await page.click("form button[type='submit']")
+	await waitForH1(page, "Volvo V70")
+	assert.equal(await focusedId(page), "car-detail-title")
+	assert.equal(new URL(page.url()).hash, "#car-c0")
+	assert.equal((await saved(page)).cars[0].mileage, 150000)
+	const odometer = await page.$eval("#main .car-stat-card", (el) => el.textContent)
+	assert.match(odometer, /150,000/)
+	await page.browserContext().close()
+})
+
+test("Cancel on the edit form returns to the car page and saves nothing", async () => {
+	const page = await openVolvo()
+	await openEdit(page)
+	await page.click("#car-make", { count: 3 })
+	await page.keyboard.type("Saab")
+	await page.click("[data-action='cancel-car']")
+	await waitForH1(page, "Volvo V70")
+	assert.equal((await saved(page)).cars[0].make, "Volvo")
+	await openEdit(page)
+	assert.equal(await page.$eval("#car-make", (el) => el.value), "Volvo") // filled afresh
+	await page.browserContext().close()
+})
+
+test("Delete asks in a dialog that names the car and starts on Cancel; Escape and Cancel change nothing", async () => {
+	const page = await openVolvo()
+	const before = await saved(page)
+	await page.click("[data-action='delete-car']")
+	assert.equal(await dialogOpen(page), true)
+	assert.equal(await page.$eval("#delete-car-title", (el) => el.textContent), "Delete Volvo V70?")
+	assert.equal(await focusedText(page), en["car.cancel"])
+
+	await page.keyboard.press("Escape")
+	assert.equal(await dialogOpen(page), false)
+	assert.deepEqual(await saved(page), before)
+
+	await page.click("[data-action='delete-car']")
+	await page.click("#delete-car-dialog form[method='dialog'] button")
+	assert.equal(await dialogOpen(page), false)
+	assert.equal(await focusedText(page), en["car.delete"]) // back on the Delete button
+	assert.deepEqual(await saved(page), before)
+	assert.equal(await h1Text(page), "Volvo V70")
+	await page.browserContext().close()
+})
+
+test("Confirm deletes the car with its records and returns to the garage, and nothing leads back", async () => {
+	const page = await openVolvo()
+	await page.click("[data-action='delete-car']")
+	await page.click("[data-action='confirm-delete-car']")
+	await waitForH1(page, en["garage.title"])
+	assert.equal(await focusedId(page), "h1")
+	const data = await saved(page)
+	assert.deepEqual(ids(data.cars), ["c1"])
+	assert.deepEqual(ids(data.serviceEntries), ["e1"])
+	assert.deepEqual(ids(data.tasks), ["t1"])
+	assert.equal((await page.$$("#main .car-card")).length, 1)
+
+	await page.goForward() // onto the deleted car's old entry
+	assert.equal(await h1Text(page), en["garage.title"])
+	await page.reload({ waitUntil: "networkidle0" })
+	await waitForH1(page, en["garage.title"])
+	assert.equal(new URL(page.url()).hash, "")
 	await page.browserContext().close()
 })

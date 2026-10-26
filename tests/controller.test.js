@@ -66,6 +66,7 @@ function fakeView() {
 		fields: [],
 		corrected: [],
 		carForms: [],
+		dialogs: [],
 		handlers: {},
 		derived: null,
 		render(_model, derived) {
@@ -78,6 +79,8 @@ function fakeView() {
 		focusField: (id) => view.fields.push(id),
 		setFieldValue: (_input, value, caret) => view.corrected.push({ value, caret }),
 		updateCarForm: (hints) => view.carForms.push(hints),
+		openDialog: (id) => view.dialogs.push(`open ${id}`),
+		closeDialog: (id) => view.dialogs.push(`close ${id}`),
 		bindActions: (handlers) => Object.assign(view.handlers, handlers),
 	}
 	return view
@@ -1252,4 +1255,225 @@ test("a second press on a back link before the browser has gone back is ignored"
 	view.handlers["cancel-service-entry"]()
 	assert.equal(backs, 1)
 	assert.equal(model.app.page, "serviceForm") // still waiting for popstate
+})
+
+/* ----------------------------------------------------------------------
+   Edit and delete a car (#25). Edit opens the car form filled in, with
+   its own history entry like the service form. Delete asks in a dialog
+   first, and only Confirm reaches the controller.
+   ---------------------------------------------------------------------- */
+
+// The car form as Edit fills it for SAVED_CAR: every value as a string,
+// and "" where the car has nothing.
+const EDIT_INPUTS = Object.freeze({
+	nickname: "",
+	make: "Volvo",
+	model: "V70",
+	year: "2008",
+	regCountry: "NO",
+	regNumber: "AB12345",
+	vin: "",
+	fuel: "diesel",
+	engine: "",
+	mileage: "184000",
+	euInspectionDue: "",
+})
+
+// garageWith, plus a service entry and a task for each of Malin's cars.
+function garageWithRecords() {
+	const storage = garageWith([
+		entryOn("a", "2026-01-10"),
+		entryOn("b", "2026-02-10", { carId: "c1" }),
+	])
+	const data = storedData(storage)
+	data.tasks = [
+		{ id: "t0", carId: "c0", title: "Change tyres" },
+		{ id: "t1", carId: "c1", title: "Wash" },
+	]
+	storage.items[STORAGE_KEY] = JSON.stringify(data)
+	return storage
+}
+
+const ids = (list) => list.map((item) => item.id)
+
+test("Edit opens the car form filled with the car's values, with its own history entry", () => {
+	const history = fakeHistory()
+	const { model, view } = boot(garageWith())
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	assert.equal(model.app.page, "carForm")
+	assert.equal(model.inputs.editingId, "c0")
+	assert.deepEqual(model.inputs.car, EDIT_INPUTS)
+	assert.deepEqual(model.inputs.errors, {})
+	assert.ok(view.derived.carForm) // the form's hints, the same as when adding
+	assert.equal(view.headings, 2)
+	assert.deepEqual(history.entries.at(-1), {
+		state: { page: "carForm", carId: "c0" },
+		url: "#edit-car-c0",
+	})
+})
+
+test("saving an edit updates the car in place, also to a lower odometer, and returns to the car page", () => {
+	const history = fakeHistory()
+	const storage = garageWith()
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	fillCar(view, { nickname: "svarten", mileage: "150000" })
+	view.handlers["save-car"]()
+	assert.deepEqual(ids(model.data.cars), ["c0", "c1", "c9"])
+	assert.deepEqual(model.data.cars[0], {
+		...SAVED_CAR,
+		id: "c0",
+		nickname: "Svarten",
+		mileage: 150000,
+	})
+	assert.deepEqual(storedData(storage), model.data)
+	assert.equal(model.app.page, "car")
+	assert.equal(model.app.selectedCarId, "c0")
+	assert.equal(view.derived.selectedCar.nickname, "Svarten")
+	assert.equal(history.index, 1) // the form's entry was left with Back
+	assert.deepEqual(model.inputs.car, initialModel.inputs.car)
+	assert.equal(model.inputs.editingId, null)
+})
+
+test("an invalid edit keeps the form open with its errors and changes nothing", () => {
+	fakeHistory()
+	const storage = garageWith()
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	fillCar(view, { make: "", year: "1800" })
+	view.handlers["save-car"]()
+	assert.deepEqual(model.inputs.errors, { make: "car.error.make", year: "car.error.year" })
+	assert.deepEqual(view.fields, ["car-make"])
+	assert.equal(model.app.page, "carForm")
+	assert.equal(model.inputs.editingId, "c0")
+	assert.equal(model.data.cars[0].make, "Volvo")
+	assert.equal(storage.items[STORAGE_KEY], before)
+})
+
+test("Cancel on an edit returns to the car page without saving, and Add car still starts empty", () => {
+	const history = fakeHistory()
+	const storage = garageWith()
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	fillCar(view, { make: "Saab" })
+	view.handlers["cancel-car"]()
+	assert.equal(model.app.page, "car")
+	assert.equal(history.index, 1)
+	assert.equal(model.data.cars[0].make, "Volvo")
+	assert.equal(storage.items[STORAGE_KEY], before)
+	assert.deepEqual(model.inputs.car, initialModel.inputs.car)
+	assert.equal(model.inputs.editingId, null)
+	view.handlers["back-garage"]()
+	view.handlers["add-car"]()
+	assert.deepEqual(model.inputs.car, initialModel.inputs.car)
+	view.handlers["cancel-car"]()
+	assert.equal(model.app.page, "garage") // adding still cancels to the garage
+})
+
+test("a reload, Back or Forward onto the edit form fills it again from the saved car", () => {
+	const history = fakeHistory()
+	const storage = garageWith()
+	const first = boot(storage)
+	openCar(first.view, "c0")
+	first.view.handlers["edit-car"]()
+	fillCar(first.view, { make: "Saab" }) // typed, never saved
+	const { model } = reload(storage)
+	assert.equal(model.app.page, "carForm")
+	assert.equal(model.inputs.editingId, "c0")
+	assert.deepEqual(model.inputs.car, EDIT_INPUTS)
+	history.back()
+	assert.equal(model.app.page, "car")
+	history.forward()
+	assert.equal(model.app.page, "carForm")
+	assert.deepEqual(model.inputs.car, EDIT_INPUTS)
+})
+
+test("an edit can't reach a car the active profile doesn't own", () => {
+	fakeHistory()
+	const storage = garageWith()
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	model.app.selectedCarId = "c9"
+	view.handlers["edit-car"]()
+	assert.equal(model.app.page, "garage")
+	model.inputs.editingId = "c9"
+	fillCar(view, TYPED)
+	view.handlers["save-car"]()
+	assert.equal(model.data.cars[2].make, "Volvo")
+	assert.equal(model.data.cars.length, 3)
+	assert.equal(storage.items[STORAGE_KEY], before)
+})
+
+test("Delete opens the confirmation dialog and changes nothing yet", () => {
+	fakeHistory()
+	const storage = garageWithRecords()
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["delete-car"]()
+	assert.deepEqual(view.dialogs, ["open delete-car-dialog"])
+	assert.equal(model.app.page, "car")
+	assert.equal(model.data.cars.length, 3)
+	assert.equal(storage.items[STORAGE_KEY], before)
+})
+
+test("confirming deletes the car with its service entries and tasks, then returns to the garage", () => {
+	const history = fakeHistory()
+	const storage = garageWithRecords()
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["delete-car"]()
+	view.handlers["confirm-delete-car"]()
+	assert.deepEqual(ids(model.data.cars), ["c1", "c9"])
+	assert.deepEqual(ids(model.data.serviceEntries), ["b"])
+	assert.deepEqual(ids(model.data.tasks), ["t1"])
+	assert.deepEqual(storedData(storage), model.data)
+	assert.deepEqual(view.dialogs, ["open delete-car-dialog", "close delete-car-dialog"])
+	assert.equal(model.app.page, "garage")
+	assert.equal(model.app.selectedCarId, null)
+	assert.deepEqual(ids(view.derived.cars), ["c1"])
+	assert.equal(history.index, 0) // Back went to the garage's own entry
+
+	// Forward and a reload both land on the garage, never the deleted car.
+	history.forward()
+	assert.equal(model.app.page, "garage")
+	assert.equal(reload(storage).model.app.page, "garage")
+	assert.equal(history.state, null)
+})
+
+test("Delete and Confirm do nothing for a car the active profile doesn't own", () => {
+	fakeHistory()
+	const storage = garageWithRecords()
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	model.app.selectedCarId = "c9"
+	view.handlers["delete-car"]()
+	view.handlers["confirm-delete-car"]()
+	assert.deepEqual(view.dialogs, [])
+	assert.equal(model.data.cars.length, 3)
+	assert.equal(storage.items[STORAGE_KEY], before)
+})
+
+test("without the history API, Cancel and Save return to the car page and Delete to the garage", () => {
+	const { model, view } = boot(garageWithRecords()) // no history API at all
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	view.handlers["cancel-car"]()
+	assert.equal(model.app.page, "car")
+	view.handlers["edit-car"]()
+	fillCar(view, { model: "V70 II" })
+	view.handlers["save-car"]()
+	assert.equal(model.app.page, "car")
+	assert.equal(model.data.cars[0].model, "V70 II")
+	view.handlers["delete-car"]()
+	view.handlers["confirm-delete-car"]()
+	assert.equal(model.app.page, "garage")
+	assert.equal(model.app.selectedCarId, null)
+	assert.deepEqual(ids(model.data.cars), ["c1", "c9"])
 })

@@ -692,7 +692,60 @@ test("the car page links to its service history with the total spent, and has no
 	assert.equal(link.dataset.id, "c0")
 	assert.equal(words(link), "Service records Total spent: NOK 3,900")
 	const controls = [...main.querySelectorAll("a, button")].map((el) => el.dataset.action)
-	assert.deepEqual(controls, ["back-garage", "open-history"]) // no edit, no "coming soon"
+	assert.deepEqual(controls, [
+		"back-garage",
+		"open-history",
+		"edit-car",
+		"delete-car",
+		"confirm-delete-car",
+		undefined, // the dialog's Cancel closes it without the controller
+	]) // no "coming soon"
+})
+
+test("the car page offers Edit and Delete on one row, each named by its text", () => {
+	const { main } = mount(carScreen())
+	const row = main.querySelector(".car-actions")
+	const buttons = [...row.querySelectorAll("button")]
+	assert.deepEqual(buttons.map(words), ["Edit car", "Delete car"])
+	assert.deepEqual(
+		buttons.map((b) => b.type),
+		["button", "button"]
+	)
+	assert.ok(buttons[1].classList.contains("btn-danger"))
+	const nb = mount(carScreen({ lang: "nb" })).main.querySelector(".car-actions")
+	assert.deepEqual([...nb.querySelectorAll("button")].map(words), ["Rediger bil", "Slett bil"])
+})
+
+test("the delete dialog names the car, starts on Cancel and closes itself on Cancel", () => {
+	const { main } = mount(carScreen())
+	const dialog = main.querySelector("dialog#delete-car-dialog")
+	assert.equal(dialog.open, false) // only Delete opens it
+	const title = main.querySelector(`#${dialog.getAttribute("aria-labelledby")}`)
+	assert.equal(words(title), "Delete Volvo V70?")
+	const text = main.querySelector(`#${dialog.getAttribute("aria-describedby")}`)
+	assert.match(words(text), /service records and tasks/)
+	const cancel = dialog.querySelector("form[method='dialog'] button[autofocus]")
+	assert.equal(words(cancel), "Cancel")
+	assert.equal(cancel.dataset.action, undefined)
+	const confirm = dialog.querySelector("[data-action='confirm-delete-car']")
+	assert.equal(words(confirm), "Delete car")
+	assert.equal(confirm.type, "button")
+	assert.ok(confirm.classList.contains("btn-danger"))
+
+	const nickname = { ...SAVED_CAR, nickname: "<b>Svarten</b>" }
+	const named = mount(carScreen({ car: nickname })).main.querySelector("#delete-car-title")
+	assert.equal(words(named), "Delete <b>Svarten</b>?") // as text, not HTML
+})
+
+test("the car form says Edit car while editing, and Add car otherwise", () => {
+	const heading = (lang, editingId) => {
+		const form = screen({ page: "carForm", profiles: ["Malin"], active: 0, chosen: { lang } })
+		form.model.inputs.editingId = editingId
+		return words(mount(form).main.querySelector("h1"))
+	}
+	assert.equal(heading("en", "c0"), "Edit car")
+	assert.equal(heading("en", null), "Add car")
+	assert.equal(heading("nb", "c0"), "Rediger bil")
 })
 
 test("the history lists entries newest first with date, work, km, workshop, cost and notes", () => {
