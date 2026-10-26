@@ -538,18 +538,20 @@ export function createView({ header, main }, i18n, config) {
 		const title = model.inputs.editingId ? "carForm.editTitle" : "carForm.title"
 		return `
 			<h1 tabindex="-1">${esc(t(title))}</h1>
-			<form class="stack" data-submit="save-car" novalidate>
-				${CAR_FIELDS.map((field) => carField(model, derived, t, field)).join("")}
+			<form class="car-form" data-submit="save-car" novalidate>
+				<div class="car-form-body stack">
+					${CAR_FIELDS.map((field) => carField(model, derived, t, field)).join("")}
+					<div class="cluster car-form-actions">
+						<button class="btn btn-primary" type="submit">${esc(t("car.save"))}</button>
+						<button class="btn" type="button" data-action="cancel-car">${esc(t("car.cancel"))}</button>
+					</div>
+				</div>
 				${datalist("car-makes", MAKES)}
 				${datalist("car-models", derived.carForm.models)}
 				${datalist(
 					"car-countries",
 					derived.carForm.countries.map((c) => c.name)
 				)}
-				<div class="cluster">
-					<button class="btn btn-primary" type="submit">${esc(t("car.save"))}</button>
-					<button class="btn" type="button" data-action="cancel-car">${esc(t("car.cancel"))}</button>
-				</div>
 			</form>`
 	}
 
