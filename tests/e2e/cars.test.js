@@ -35,6 +35,10 @@ after(async () => {
 async function openGarage(lists = {}) {
 	const context = await browser.createBrowserContext()
 	const page = await context.newPage()
+	// Reduced motion makes the design system scroll instantly. On Linux the
+	// smooth scroll to the focused heading after a page change can still be
+	// running when Puppeteer clicks, so the click lands on another row.
+	await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }])
 	await page.evaluateOnNewDocument((seed) => {
 		localStorage.setItem("lang", "en")
 		if (localStorage.getItem("motorcatalog")) return // keep what a test saved
@@ -252,6 +256,37 @@ test("Cancel on the edit form returns to the car page and saves nothing", async 
 	assert.equal((await saved(page)).cars[0].make, "Volvo")
 	await openEdit(page)
 	assert.equal(await page.$eval("#car-make", (el) => el.value), "Volvo") // filled afresh
+	await page.browserContext().close()
+})
+
+test("Edit car fits a tablet screen with each label beside its input, and a phone keeps labels on top", async () => {
+	const page = await openVolvo()
+	await page.setViewport({ width: 721, height: 1015 })
+	await openEdit(page)
+	const layout = () =>
+		page.evaluate(() => ({
+			fits: document.documentElement.scrollHeight <= innerHeight,
+			rows: [...document.querySelectorAll(".split-form .field")].map((field) => {
+				const label = field.querySelector("label").getBoundingClientRect()
+				const control = field.querySelector("input, select").getBoundingClientRect()
+				return {
+					height: control.height,
+					beside: label.right <= control.left,
+					offset: Math.abs(label.top + label.height / 2 - (control.top + control.height / 2)),
+				}
+			}),
+		}))
+	const tablet = await layout()
+	assert.ok(tablet.fits, "the whole form fits without scrolling")
+	assert.equal(tablet.rows.length, 11)
+	for (const row of tablet.rows) {
+		assert.equal(row.height, 44)
+		assert.ok(row.beside && row.offset < 1, "the label sits beside its input, on one centre line")
+	}
+
+	await page.setViewport({ width: 375, height: 812 })
+	const phone = await layout()
+	assert.ok(phone.rows.every((row) => !row.beside && row.height === 44))
 	await page.browserContext().close()
 })
 

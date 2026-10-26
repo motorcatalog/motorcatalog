@@ -49,6 +49,10 @@ const CAR = {
 async function openGarage() {
 	const context = await browser.createBrowserContext()
 	const page = await context.newPage()
+	// Reduced motion makes the design system scroll instantly. On Linux the
+	// smooth scroll to the focused heading after a page change can still be
+	// running when Puppeteer clicks, so the click lands on another row.
+	await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }])
 	await page.evaluateOnNewDocument((car) => {
 		localStorage.setItem("lang", "en")
 		if (localStorage.getItem("motorcatalog")) return // keep what a test saved
@@ -181,5 +185,42 @@ test("an empty service form shows each error and focuses the first; Cancel saves
 	await page.click("form [data-action='cancel-service-entry']")
 	await waitForH1(page, en["history.title"])
 	assert.deepEqual((await saved(page)).serviceEntries, [])
+	await page.browserContext().close()
+})
+
+test("Register service fits a tablet screen with each label beside its field, and a phone keeps labels on top", async () => {
+	const page = await openGarage()
+	await page.setViewport({ width: 721, height: 1015 })
+	await openCar(page, "c0", "Volvo V70")
+	await openHistory(page)
+	await page.click("[data-action='register-service']")
+	await waitForH1(page, en["service.formTitle"])
+	// A textarea's label lines up with its first line, the rest with the
+	// middle of their control: both are 22 px down from the control's top.
+	const layout = () =>
+		page.evaluate(() => ({
+			fits: document.documentElement.scrollHeight <= innerHeight,
+			rows: [...document.querySelectorAll(".split-form .field")].map((field) => {
+				const label = field.querySelector("label")
+				const control = field.querySelector("input, select, textarea").getBoundingClientRect()
+				const text = label.getBoundingClientRect()
+				const padding = Number.parseFloat(getComputedStyle(label).paddingTop)
+				const lineMiddle = text.top + padding + (text.height - padding) / 2
+				return {
+					beside: text.right <= control.left,
+					offset: Math.abs(lineMiddle - (control.top + 22)),
+				}
+			}),
+		}))
+	const tablet = await layout()
+	assert.ok(tablet.fits, "the whole form fits without scrolling")
+	assert.equal(tablet.rows.length, 7)
+	for (const row of tablet.rows) {
+		assert.ok(row.beside && row.offset < 1, "the label sits beside its field, on its first line")
+	}
+
+	await page.setViewport({ width: 375, height: 812 })
+	const phone = await layout()
+	assert.ok(phone.rows.every((row) => !row.beside))
 	await page.browserContext().close()
 })

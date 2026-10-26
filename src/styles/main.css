@@ -414,6 +414,40 @@ main h1[tabindex="-1"]:focus {
 	margin-top: var(--space-2);
 }
 
+/* The car form and the service form. On a phone each label sits over
+   its input. Once the form itself is wide enough, the label moves to the
+   left of the input, still one field per row, so the whole form fits on
+   a tablet screen. A container query, not a media query: the form's own
+   width decides, so a narrow pane on a wide screen keeps the stacked
+   layout. The query can't restyle the form it measures, so the fields
+   sit in .split-form-body. An error stays under the input, a textarea's
+   label lines up with its first line, and the buttons line up with the
+   inputs. */
+.split-form {
+	container-type: inline-size;
+}
+@container (min-width: 32rem) {
+	.split-form-body {
+		gap: var(--space-3);
+	}
+	.split-form .field {
+		display: grid;
+		grid-template-columns: 12rem minmax(0, 1fr);
+		align-items: center;
+		gap: var(--space-1) var(--space-4);
+	}
+	.split-form .field:has(.textarea) .label {
+		align-self: start;
+		padding-top: calc((2.75rem - 1lh) / 2);
+	}
+	.split-form .field-error {
+		grid-column: 2;
+	}
+	.split-form-actions {
+		margin-left: calc(12rem + var(--space-4));
+	}
+}
+
 /* The car page's dialogs: Delete asks first, and Mark done asks for the
    next EU-kontroll date. .modal draws the box and centres it across. The
    base reset zeroes every margin, so the auto block margins that centre a
