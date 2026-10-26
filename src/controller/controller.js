@@ -336,6 +336,9 @@ export function readPreferences({ i18n, config, languages = navigator.languages 
 	}
 }
 
+// The System row ("" or no value) is stored in the model as null.
+const toChoice = (value) => (value === "" || value === undefined ? null : value)
+
 // `languages` defaults to navigator.languages; tests pass their own.
 export function createController({ model, view, i18n, config, languages }) {
 	let headerKey = null
@@ -347,7 +350,11 @@ export function createController({ model, view, i18n, config, languages }) {
 	const blankInputs = structuredClone(model.inputs)
 
 	function init() {
-		model.app.preferences = readPreferences({ i18n, config, languages })
+		// Filled in place, so the model keeps the one preferences object it
+		// was created with.
+		const { chosen, system } = readPreferences({ i18n, config, languages })
+		Object.assign(model.app.preferences.chosen, chosen)
+		Object.assign(model.app.preferences.system, system)
 		const saved = loadData()
 		if (saved) model.data = saved
 		model.app.page = model.data.activeProfileId ? "garage" : "profiles"
@@ -643,7 +650,7 @@ export function createController({ model, view, i18n, config, languages }) {
 	// An explicit choice, or "" / null for the System row. A repeat of the
 	// current choice changes nothing, so nothing is redrawn.
 	function setPreference(name, value) {
-		const next = value === "" || value === undefined ? null : value
+		const next = toChoice(value)
 		const { chosen, system } = model.app.preferences
 		if (next === chosen[name]) return
 		chosen[name] = next
@@ -663,11 +670,12 @@ export function createController({ model, view, i18n, config, languages }) {
 	}
 
 	// A picker row was chosen. "" is the System row and removes the key.
-	// The model is updated last, so a storage failure never loses the choice.
-	// Focus returns to the trigger of the picker that was used: its new name
-	// is the audible result of the press.
+	// A repeat of the current choice writes nothing. The model is updated
+	// last, so a storage failure never loses the choice. Focus returns to the
+	// trigger of the picker that was used: its new name is the audible result
+	// of the press.
 	function choose(name, value) {
-		writePreference(name, value)
+		if (toChoice(value) !== model.app.preferences.chosen[name]) writePreference(name, value)
 		setPreference(name, value)
 		view.focusPicker(name)
 	}

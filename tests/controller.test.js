@@ -37,13 +37,16 @@ const i18n = createTranslator(bundles, { fallback: FALLBACK_LANG })
 // told to refuse writes, the way Safari private mode does.
 function fakeStorage(items = {}, { throwOnSet = false } = {}) {
 	const removed = []
+	const written = []
 	return {
 		items,
 		removed,
+		written,
 		getItem: (key) => items[key] ?? null,
 		setItem(key, value) {
 			if (throwOnSet) throw new Error("QuotaExceededError")
 			items[key] = value
+			written.push(key)
 		},
 		removeItem(key) {
 			delete items[key]
@@ -219,7 +222,39 @@ test("choosing the row that is already active renders nothing new but still refo
 	assert.equal(view.renders, 1)
 	view.handlers["set-lang"](null, { dataset: { lang: "" } }) // System is already active
 	assert.equal(view.renders, 1)
+	assert.equal(view.headerRenders, 1)
 	assert.deepEqual(view.focused, ["lang"])
+})
+
+test("choosing the row that is already active writes nothing to storage", () => {
+	const storage = fakeStorage({ theme: "light" })
+	const { view } = boot(storage)
+	view.handlers["set-theme"](null, { dataset: { value: "light" } })
+	view.handlers["set-lang"](null, { dataset: { lang: "" } }) // System is already active
+	assert.deepEqual(storage.written, [])
+	assert.deepEqual(storage.removed, [])
+})
+
+test("init fills the model's own preferences object instead of replacing it", () => {
+	Object.defineProperty(globalThis, "localStorage", {
+		value: fakeStorage({ lang: "nb" }),
+		configurable: true,
+		writable: true,
+	})
+	const model = structuredClone(initialModel)
+	const { preferences } = model.app
+	const { chosen, system } = preferences
+	createController({
+		model,
+		view: fakeView(),
+		i18n,
+		config: MULTI_CURRENCY,
+		languages: ["en"],
+	}).init()
+	assert.equal(model.app.preferences, preferences)
+	assert.equal(model.app.preferences.chosen, chosen)
+	assert.equal(model.app.preferences.system, system)
+	assert.equal(chosen.lang, "nb")
 })
 
 test("the header re-renders only when a preference changes", () => {
