@@ -339,6 +339,9 @@ export function readPreferences({ i18n, config, languages = navigator.languages 
 // `languages` defaults to navigator.languages; tests pass their own.
 export function createController({ model, view, i18n, config, languages }) {
 	let headerKey = null
+	// True from a history.back() until its popstate arrives. back() is
+	// asynchronous, so a second press in between would go back twice.
+	let leaving = false
 	// The empty forms, taken before anything is typed, so a page change can
 	// start every form afresh.
 	const blankInputs = structuredClone(model.inputs)
@@ -405,7 +408,10 @@ export function createController({ model, view, i18n, config, languages }) {
 			},
 			// actionName: (event, target) => { change model, then render() }
 		})
-		globalThis.addEventListener?.("popstate", (event) => showHistoryEntry(event.state))
+		globalThis.addEventListener?.("popstate", (event) => {
+			leaving = false
+			showHistoryEntry(event.state)
+		})
 
 		// While no theme key is stored the page follows the OS. Another tab
 		// changing or clearing the key is applied here too. Both go through
@@ -475,6 +481,7 @@ export function createController({ model, view, i18n, config, languages }) {
 	function setActiveProfile(id) {
 		model.data.activeProfileId = id
 		model.app.selectedCarId = null
+		dropCarPageEntry()
 		saveData(model.data)
 		clearInputs()
 		go(id ? "garage" : "profiles")
@@ -547,8 +554,10 @@ export function createController({ model, view, i18n, config, languages }) {
 	// history entry the browser goes back, so our link and the browser's
 	// Back button always agree. Without one, `fallback` opens directly.
 	function leaveCarPage(page, fallback) {
+		if (leaving) return
 		if (page === "serviceForm") clearServiceEntryInputs()
 		if (globalThis.history?.state?.page === page) {
+			leaving = true
 			globalThis.history.back()
 			return
 		}
@@ -581,6 +590,14 @@ export function createController({ model, view, i18n, config, languages }) {
 			model.app.selectedCarId = state.carId
 			return
 		}
+		dropCarPageEntry()
+	}
+
+	// The current history entry stops naming a car page, so a reload or a
+	// back link never returns to it. Used when its car is gone and when the
+	// profile changes.
+	function dropCarPageEntry() {
+		if (!Object.hasOwn(CAR_PAGES, globalThis.history?.state?.page ?? "")) return
 		const { pathname, search } = globalThis.location
 		globalThis.history.replaceState(null, "", pathname + search)
 	}

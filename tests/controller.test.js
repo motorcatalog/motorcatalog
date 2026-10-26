@@ -1193,3 +1193,28 @@ test("switching profile forgets the selected car", () => {
 	assert.equal(model.app.page, "profiles")
 	assert.equal(model.app.selectedCarId, null)
 })
+
+test("switching profile drops the car page's history entry, so a reload opens the garage", () => {
+	const history = fakeHistory()
+	const storage = garageWith()
+	const { view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["switch-profile"]()
+	view.handlers["choose-profile"](null, { dataset: { id: "p0" } })
+	assert.deepEqual(history.state, null)
+	const { model } = reload(storage)
+	assert.equal(model.app.page, "garage")
+})
+
+test("a second press on a back link before the browser has gone back is ignored", () => {
+	const history = fakeHistory()
+	let backs = 0
+	history.back = () => backs++ // the real back() lands later, in a popstate
+	const { model, view } = boot(garageWith())
+	openHistory(view, "c0")
+	view.handlers["register-service"]()
+	view.handlers["cancel-service-entry"]()
+	view.handlers["cancel-service-entry"]()
+	assert.equal(backs, 1)
+	assert.equal(model.app.page, "serviceForm") // still waiting for popstate
+})
