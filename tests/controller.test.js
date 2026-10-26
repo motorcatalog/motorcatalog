@@ -13,6 +13,7 @@ import { createTranslator } from "../i18n/index.js"
 import { config } from "../src/config.js"
 import {
 	carFormHints,
+	carHistory,
 	createController,
 	loadData,
 	resolveCountry,
@@ -23,6 +24,7 @@ import {
 	typedCarInput,
 	validateCar,
 	validateProfileName,
+	validateServiceEntry,
 } from "../src/controller/controller.js"
 import { PLATES } from "../src/data/plates.js"
 import { bundles, FALLBACK_LANG } from "../src/locales/index.js"
@@ -131,6 +133,8 @@ const GLOBALS = [
 	"addEventListener",
 	"removeEventListener",
 	"matchMedia",
+	"history",
+	"location",
 ]
 const saved = {}
 beforeEach(() => {
@@ -156,8 +160,6 @@ test("first load resolves every preference from the browser when nothing is stor
 		currency: "NOK",
 		profile: null,
 		cars: [],
-		selectedCar: null,
-		totalServiceCost: 0,
 	}) // no matchMedia: the DS default
 	assert.equal(globalThis.document.documentElement.lang, "nb")
 	assert.equal(globalThis.document.documentElement.dataset.theme, "dark")
@@ -784,4 +786,435 @@ test("a car can't be saved without an active profile", () => {
 	fillCar(view, TYPED)
 	view.handlers["save-car"]()
 	assert.deepEqual(model.data.cars, [])
+})
+
+/* ----------------------------------------------------------------------
+   A car's pages: details (#21), service history (#23) and the service
+   form (#22). Every visit is a browser history entry, so these tests
+   drive a fake history whose back() fires popstate at once.
+   ---------------------------------------------------------------------- */
+
+function fakeHistory(state = null) {
+	const entries = [{ state, url: "/" }]
+	let index = 0
+	const history = {
+		entries,
+		get state() {
+			return entries[index].state
+		},
+		get index() {
+			return index
+		},
+		pushState(next, _title, url) {
+			entries.splice(index + 1)
+			entries.push({ state: structuredClone(next), url })
+			index++
+		},
+		replaceState(next, _title, url) {
+			entries[index] = { state: next, url }
+		},
+		back() {
+			if (index > 0) move(-1)
+		},
+		forward() {
+			if (index < entries.length - 1) move(1)
+		},
+	}
+	function move(step) {
+		index += step
+		for (const [type, fn] of windowListeners) if (type === "popstate") fn({ state: history.state })
+	}
+	globalThis.history = history
+	globalThis.location = { pathname: "/", search: "", hash: "" }
+	return history
+}
+
+// A reload: the page's listeners go, the history and the storage stay.
+function reload(storage) {
+	windowListeners = []
+	return boot(storage)
+}
+
+const SAVED_CAR = Object.freeze({
+	profileId: "p0",
+	nickname: null,
+	make: "Volvo",
+	model: "V70",
+	year: 2008,
+	regCountry: "NO",
+	regNumber: "AB12345",
+	vin: null,
+	fuel: "diesel",
+	engine: null,
+	mileage: 184000,
+	euInspectionDue: null,
+})
+
+// Malin (active) owns c0 and c1, Rune owns c9.
+function garageWith(entries = []) {
+	const data = JSON.parse(dataWith(["Malin", "Rune"], 0))
+	data.cars = [
+		{ ...SAVED_CAR, id: "c0" },
+		{ ...SAVED_CAR, id: "c1", make: "Toyota", model: "Corolla" },
+		{ ...SAVED_CAR, id: "c9", profileId: "p1" },
+	]
+	data.serviceEntries = entries
+	return fakeStorage({ [STORAGE_KEY]: JSON.stringify(data) })
+}
+
+const entryOn = (id, date, { category = "service", cost = 1000, carId = "c0" } = {}) => ({
+	id,
+	carId,
+	category,
+	title: `Work ${id}`,
+	date,
+	mileage: 180000,
+	cost,
+	workshop: null,
+	notes: null,
+})
+
+const CLICK = Object.freeze({ preventDefault() {} })
+const openCar = (view, id) => view.handlers["open-car"](CLICK, { dataset: { id } })
+const openHistory = (view, id) => view.handlers["open-history"](CLICK, { dataset: { id } })
+
+function fillService(view, values) {
+	for (const [field, value] of Object.entries(values)) {
+		view.handlers["service-entry-input"](null, { dataset: { field }, value })
+	}
+}
+
+const SERVICE = Object.freeze({
+	category: "repair",
+	title: "  New brake pads ",
+	date: "2026-03-14",
+	mileage: "190000",
+	cost: "2450",
+	workshop: "  ",
+	notes: " Front axle ",
+})
+
+const LIMITS = Object.freeze({ mileageMax: config.carMileageMax, today: "2026-10-26" })
+
+test("validateServiceEntry trims the text, stores numbers and empty optional text as null", () => {
+	const { entry, errors } = validateServiceEntry(SERVICE, LIMITS)
+	assert.deepEqual(errors, {})
+	assert.deepEqual(entry, {
+		category: "repair",
+		title: "New brake pads",
+		date: "2026-03-14",
+		mileage: 190000,
+		cost: 2450,
+		workshop: null,
+		notes: "Front axle",
+	})
+})
+
+test("validateServiceEntry needs the type of work, a date, the odometer and the cost, in form order", () => {
+	const empty = { ...SERVICE, title: " ", date: "", mileage: "", cost: "" }
+	const { errors } = validateServiceEntry(empty, LIMITS)
+	assert.deepEqual(errors, {
+		title: "service.error.title",
+		date: "service.error.dateRequired",
+		mileage: "service.error.mileage",
+		cost: "service.error.cost",
+	})
+	assert.deepEqual(Object.keys(errors), ["title", "date", "mileage", "cost"])
+})
+
+test("validateServiceEntry takes a real date up to today, never one in the future", () => {
+	const dateError = (date) => validateServiceEntry({ ...SERVICE, date }, LIMITS).errors.date
+	assert.equal(dateError("2026-10-26"), undefined) // today
+	assert.equal(dateError("2026-10-27"), "service.error.dateFuture")
+	assert.equal(dateError("2026-02-30"), "service.error.dateInvalid")
+	assert.equal(dateError("14.03.2026"), "service.error.dateInvalid")
+})
+
+test("validateServiceEntry takes whole numbers from 0, the odometer up to the car form's limit", () => {
+	const error = (field, value) =>
+		validateServiceEntry({ ...SERVICE, [field]: value }, LIMITS).errors
+	for (const value of ["-1", "1.5", "1e3", "abc", "12 000"]) {
+		assert.deepEqual(error("mileage", value), { mileage: "service.error.mileage" }, value)
+		assert.deepEqual(error("cost", value), { cost: "service.error.cost" }, value)
+	}
+	assert.deepEqual(error("mileage", "0"), {})
+	assert.deepEqual(error("cost", "0"), {})
+	assert.deepEqual(error("mileage", String(config.carMileageMax)), {})
+	assert.deepEqual(error("mileage", String(config.carMileageMax + 1)), {
+		mileage: "service.error.mileage",
+	})
+	assert.deepEqual(error("category", "tyres"), { category: "service.error.category" })
+})
+
+test("carHistory keeps one car's entries, totals them and shows the filtered ones newest first", () => {
+	const entries = [
+		entryOn("a", "2025-05-01", { cost: 500 }),
+		entryOn("b", "2026-01-10", { category: "repair", cost: 2000 }),
+		entryOn("c", "2026-01-10", { cost: 300 }), // same day as b, added later
+		entryOn("x", "2026-06-01", { carId: "c1", cost: 9999 }),
+	]
+	const all = carHistory(entries, "c0")
+	assert.equal(all.count, 3)
+	assert.equal(all.totalCost, 2800)
+	assert.deepEqual(
+		all.shown.map((e) => e.id),
+		["c", "b", "a"]
+	)
+	const repairs = carHistory(entries, "c0", "repair")
+	assert.equal(repairs.count, 3) // the count is the car's, not the filter's
+	assert.deepEqual(
+		repairs.shown.map((e) => e.id),
+		["b"]
+	)
+	assert.deepEqual(carHistory(entries, "c0", "other").shown, [])
+	assert.deepEqual(
+		entries.map((e) => e.id),
+		["a", "b", "c", "x"]
+	) // never sorted in place
+})
+
+test("a car card opens its page, focuses the heading and adds a history entry", () => {
+	const history = fakeHistory()
+	const { model, view } = boot(garageWith([entryOn("a", "2026-01-10", { cost: 1200 })]))
+	openCar(view, "c0")
+	assert.equal(model.app.page, "car")
+	assert.equal(model.app.selectedCarId, "c0")
+	assert.equal(view.headings, 1)
+	assert.equal(view.derived.selectedCar.id, "c0")
+	assert.equal(view.derived.history.totalCost, 1200)
+	assert.deepEqual(history.entries.at(-1), { state: { page: "car", carId: "c0" }, url: "#car-c0" })
+})
+
+test("another profile's car or an unknown id opens nothing and adds no history entry", () => {
+	const history = fakeHistory()
+	const { model, view } = boot(garageWith())
+	openCar(view, "c9")
+	openCar(view, "nope")
+	assert.equal(model.app.page, "garage")
+	assert.equal(history.entries.length, 1)
+	assert.equal(view.headings, 0)
+})
+
+test("Back to garage goes back in the browser history, the same as the browser's Back", () => {
+	const history = fakeHistory()
+	const { model, view } = boot(garageWith())
+	openCar(view, "c0")
+	view.handlers["back-garage"]()
+	assert.equal(model.app.page, "garage")
+	assert.equal(model.app.selectedCarId, null)
+	assert.equal(history.index, 0)
+	history.forward()
+	assert.equal(model.app.page, "car") // Forward opens it again
+	history.back()
+	assert.equal(model.app.page, "garage")
+	assert.equal(view.headings, 4)
+})
+
+test("without a history entry of their own, the back links open their page directly", () => {
+	const { model, view } = boot(garageWith()) // no history API at all
+	openCar(view, "c0")
+	openHistory(view, "c0")
+	view.handlers["back-car"]()
+	assert.equal(model.app.page, "car")
+	view.handlers["back-garage"]()
+	assert.equal(model.app.page, "garage")
+	assert.equal(model.app.selectedCarId, null)
+})
+
+test("after a reload, Back to garage opens the garage and not a car opened before the reload", () => {
+	const history = fakeHistory()
+	const storage = garageWith()
+	openCar(boot(storage).view, "c0")
+	const { model, view } = reload(storage)
+	assert.equal(model.app.page, "car") // the reload keeps the page
+	assert.equal(model.app.selectedCarId, "c0")
+	view.handlers["back-garage"]()
+	assert.equal(model.app.page, "garage")
+	openCar(view, "c1")
+	view.handlers["back-garage"]()
+	assert.equal(model.app.page, "garage")
+	assert.equal(history.index, 0)
+})
+
+test("a reload on a page for a car that is gone opens the garage and drops the stale entry", () => {
+	const history = fakeHistory({ page: "history", carId: "deleted" })
+	globalThis.location = { pathname: "/app/", search: "?x=1", hash: "#history-deleted" }
+	const { model } = boot(garageWith())
+	assert.equal(model.app.page, "garage")
+	assert.deepEqual(history.entries[0], { state: null, url: "/app/?x=1" })
+})
+
+test("a history entry for another profile's car, reached with Back, leaves for the garage", () => {
+	const history = fakeHistory({ page: "car", carId: "c9" })
+	history.pushState({ page: "car", carId: "c0" }, "", "#car-c0")
+	const { model } = boot(garageWith())
+	assert.equal(model.app.page, "car")
+	history.back()
+	assert.equal(model.app.page, "garage")
+	assert.equal(model.app.selectedCarId, null)
+})
+
+test("the car page links to the history, and its back link returns to the car", () => {
+	const history = fakeHistory()
+	const { model, view } = boot(garageWith())
+	openCar(view, "c0")
+	openHistory(view, "c0")
+	assert.equal(model.app.page, "history")
+	assert.equal(history.entries.at(-1).url, "#history-c0")
+	view.handlers["back-car"]()
+	assert.equal(model.app.page, "car")
+	assert.equal(model.app.selectedCarId, "c0")
+	assert.equal(history.index, 1)
+})
+
+test("the history filter redraws the list, keeps focus on the select and ignores unknown values", () => {
+	fakeHistory()
+	const entries = [entryOn("a", "2025-05-01"), entryOn("b", "2026-01-10", { category: "repair" })]
+	const { model, view } = boot(garageWith(entries))
+	openHistory(view, "c0")
+	const renders = view.renders
+	view.handlers["history-filter"](null, { value: "repair" })
+	assert.equal(model.app.historyFilter, "repair")
+	assert.deepEqual(
+		view.derived.history.shown.map((e) => e.id),
+		["b"]
+	)
+	assert.deepEqual(view.fields, ["history-filter"])
+	view.handlers["history-filter"](null, { value: "repair" }) // the same filter again
+	view.handlers["history-filter"](null, { value: "tyres" })
+	assert.equal(view.renders, renders + 1)
+	assert.equal(model.app.historyFilter, "repair")
+	openHistory(view, "c1") // another car starts unfiltered
+	assert.equal(model.app.historyFilter, "all")
+})
+
+test("Register service opens an empty form, and typing fills it without a redraw", () => {
+	const history = fakeHistory()
+	const { model, view } = boot(garageWith())
+	openHistory(view, "c0")
+	view.handlers["register-service"]()
+	assert.equal(model.app.page, "serviceForm")
+	assert.equal(history.entries.at(-1).url, "#register-service-c0")
+	assert.deepEqual(model.inputs.serviceEntry, initialModel.inputs.serviceEntry)
+	assert.match(view.derived.today, /^\d{4}-\d{2}-\d{2}$/)
+	const renders = view.renders
+	fillService(view, { title: "Oil change", nope: "ignored" })
+	assert.equal(model.inputs.serviceEntry.title, "Oil change")
+	assert.equal(Object.hasOwn(model.inputs.serviceEntry, "nope"), false)
+	assert.equal(view.renders, renders)
+})
+
+test("saving a service adds the entry, raises the odometer and returns to the unfiltered history", () => {
+	const history = fakeHistory()
+	const storage = garageWith()
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	view.handlers["history-filter"](null, { value: "other" })
+	view.handlers["register-service"]()
+	fillService(view, SERVICE)
+	view.handlers["save-service-entry"]()
+	const [entry] = model.data.serviceEntries
+	assert.match(entry.id, /^[0-9a-f-]{36}$/)
+	assert.equal(entry.carId, "c0")
+	assert.equal(entry.title, "New brake pads")
+	assert.equal(entry.workshop, null)
+	assert.equal(model.data.cars[0].mileage, 190000)
+	assert.deepEqual(storedData(storage), model.data)
+	assert.equal(model.app.page, "history")
+	assert.equal(model.app.historyFilter, "all")
+	assert.deepEqual(
+		view.derived.history.shown.map((e) => e.id),
+		[entry.id]
+	)
+	assert.deepEqual(model.inputs.serviceEntry, initialModel.inputs.serviceEntry)
+	assert.equal(history.index, 1) // the form's entry was left with Back
+})
+
+test("an older service entry never lowers the car's odometer", () => {
+	fakeHistory()
+	const { model, view } = boot(garageWith())
+	openHistory(view, "c0")
+	view.handlers["register-service"]()
+	fillService(view, { ...SERVICE, mileage: "150000" })
+	view.handlers["save-service-entry"]()
+	assert.equal(model.data.serviceEntries.length, 1)
+	assert.equal(model.data.cars[0].mileage, 184000)
+})
+
+test("an invalid service shows its errors, keeps what was typed and focuses the first field with one", () => {
+	fakeHistory()
+	const storage = garageWith()
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	view.handlers["register-service"]()
+	fillService(view, { ...SERVICE, title: "", cost: "-5" })
+	view.handlers["save-service-entry"]()
+	assert.deepEqual(model.inputs.errors, {
+		title: "service.error.title",
+		cost: "service.error.cost",
+	})
+	assert.deepEqual(view.fields, ["service-title"])
+	assert.equal(model.app.page, "serviceForm")
+	assert.equal(model.inputs.serviceEntry.notes, SERVICE.notes)
+	assert.deepEqual(model.data.serviceEntries, [])
+	assert.deepEqual(storedData(storage).serviceEntries, [])
+})
+
+test("Cancel leaves the form without saving, and the form starts empty next time", () => {
+	const history = fakeHistory()
+	const { model, view } = boot(garageWith())
+	openHistory(view, "c0")
+	view.handlers["register-service"]()
+	fillService(view, { ...SERVICE, title: "" })
+	view.handlers["save-service-entry"]()
+	view.handlers["cancel-service-entry"]()
+	assert.equal(model.app.page, "history")
+	assert.equal(history.index, 1)
+	assert.deepEqual(model.data.serviceEntries, [])
+	assert.deepEqual(model.inputs.errors, {})
+	view.handlers["register-service"]()
+	assert.deepEqual(model.inputs.serviceEntry, initialModel.inputs.serviceEntry)
+})
+
+test("a service can't be saved for a car the active profile doesn't own", () => {
+	fakeHistory()
+	const { model, view } = boot(garageWith())
+	model.app.selectedCarId = "c9"
+	fillService(view, SERVICE)
+	view.handlers["save-service-entry"]()
+	assert.deepEqual(model.data.serviceEntries, [])
+})
+
+test("switching profile forgets the selected car", () => {
+	fakeHistory()
+	const { model, view } = boot(garageWith())
+	openCar(view, "c0")
+	view.handlers["switch-profile"]()
+	assert.equal(model.app.page, "profiles")
+	assert.equal(model.app.selectedCarId, null)
+})
+
+test("switching profile drops the car page's history entry, so a reload opens the garage", () => {
+	const history = fakeHistory()
+	const storage = garageWith()
+	const { view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["switch-profile"]()
+	view.handlers["choose-profile"](null, { dataset: { id: "p0" } })
+	assert.deepEqual(history.state, null)
+	const { model } = reload(storage)
+	assert.equal(model.app.page, "garage")
+})
+
+test("a second press on a back link before the browser has gone back is ignored", () => {
+	const history = fakeHistory()
+	let backs = 0
+	history.back = () => backs++ // the real back() lands later, in a popstate
+	const { model, view } = boot(garageWith())
+	openHistory(view, "c0")
+	view.handlers["register-service"]()
+	view.handlers["cancel-service-entry"]()
+	view.handlers["cancel-service-entry"]()
+	assert.equal(backs, 1)
+	assert.equal(model.app.page, "serviceForm") // still waiting for popstate
 })

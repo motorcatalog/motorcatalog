@@ -29,10 +29,14 @@ for (const name of ICONS) {
 	})
 }
 
+// Paths are relative to the manifest, so the app also installs from a
+// sub-path such as motorcatalog.github.io/motorcatalog/.
 test("every manifest icon exists, and no entry mixes any and maskable", () => {
 	const manifest = JSON.parse(read("public/manifest.webmanifest"))
+	assert.equal(manifest.start_url, "./")
 	for (const icon of manifest.icons) {
-		assert.ok(existsSync(new URL(`public${icon.src}`, root)), `${icon.src} is missing`)
+		assert.ok(!icon.src.startsWith("/"), `${icon.src} is not relative`)
+		assert.ok(existsSync(new URL(`public/${icon.src}`, root)), `${icon.src} is missing`)
 		assert.ok(["any", "maskable"].includes(icon.purpose), `${icon.src}: ${icon.purpose}`)
 	}
 })

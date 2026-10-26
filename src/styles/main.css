@@ -238,12 +238,9 @@ main h1[tabindex="-1"]:focus {
 	line-height: var(--leading-snug);
 }
 
-.car-future-cards {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
-	gap: var(--space-3);
-}
-.car-future-card {
+.car-link {
+	color: inherit;
+	text-decoration: none;
 	min-height: 5.5rem;
 	display: grid;
 	grid-template-columns: auto 1fr;
@@ -251,33 +248,29 @@ main h1[tabindex="-1"]:focus {
 	gap: var(--space-3);
 	padding: var(--space-3);
 }
-.car-future-link {
-	color: inherit;
-	text-decoration: none;
-}
-.car-future-link:hover {
+.car-link:hover {
 	background: var(--elevated-bg);
 	border-color: var(--border-strong);
 }
-.car-future-link:focus-visible {
+.car-link:focus-visible {
 	outline: 2px solid var(--accent-strong);
 	outline-offset: 2px;
 	box-shadow: var(--shadow-focus);
 }
-.car-future-copy {
+.car-link-copy {
 	min-width: 0;
 	display: grid;
 	gap: var(--space-1);
 }
-.car-future-copy strong {
+.car-link-copy strong {
 	color: var(--accent);
 	font-size: var(--text-lg);
 }
-.car-future-copy > span {
+.car-link-copy > span {
 	color: var(--text-muted);
 	font-size: var(--text-sm);
 }
-.car-future-copy > span:last-child {
+.car-link-copy > span:last-child {
 	font-variant-numeric: tabular-nums;
 }
 
