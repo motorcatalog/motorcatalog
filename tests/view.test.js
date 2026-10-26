@@ -10,7 +10,7 @@ import { afterEach, test } from "node:test"
 import { JSDOM } from "jsdom"
 import { createTranslator } from "../i18n/index.js"
 import { config } from "../src/config.js"
-import { carFormHints, resolvePreferences } from "../src/controller/controller.js"
+import { carFormHints, carHistory, resolvePreferences } from "../src/controller/controller.js"
 import { MAKES } from "../src/data/models.js"
 import { PLATES } from "../src/data/plates.js"
 import { bundles, FALLBACK_LANG } from "../src/locales/index.js"
@@ -573,4 +573,243 @@ test("focusHeading and focusField move focus inside main", () => {
 	assert.equal(dom.window.document.activeElement, main.querySelector("h1"))
 	view.focusField("profile-name")
 	assert.equal(dom.window.document.activeElement, main.querySelector("#profile-name"))
+})
+
+/* ----------------------------------------------------------------------
+   A car's pages: details (#21), service history (#23) and the service
+   form (#22). carScreen hands the view what the controller derives.
+   ---------------------------------------------------------------------- */
+
+const SAVED_CAR = Object.freeze({
+	id: "c0",
+	profileId: "p0",
+	nickname: null,
+	make: "Volvo",
+	model: "V70",
+	year: 2008,
+	regCountry: "NO",
+	regNumber: "AB12345",
+	vin: null,
+	fuel: "diesel",
+	engine: null,
+	mileage: 184000,
+	euInspectionDue: "2027-03-01",
+})
+
+const ENTRIES = Object.freeze([
+	{
+		id: "e0",
+		carId: "c0",
+		category: "service",
+		title: "Oil change",
+		date: "2025-05-01",
+		mileage: 170000,
+		cost: 1450,
+		workshop: null,
+		notes: null,
+	},
+	{
+		id: "e1",
+		carId: "c0",
+		category: "repair",
+		title: "Brake pads",
+		date: "2026-03-14",
+		mileage: 182500,
+		cost: 2450,
+		workshop: "Bilverksted AS",
+		notes: "Front axle",
+	},
+])
+
+function carScreen({
+	page = "car",
+	lang = "en",
+	car = SAVED_CAR,
+	entries = ENTRIES,
+	filter = "all",
+	inputs = {},
+	errors = {},
+} = {}) {
+	const { model, derived } = screen({
+		page,
+		chosen: { lang },
+		profiles: ["Malin"],
+		active: 0,
+		cars: car ? [car] : [],
+	})
+	model.app.selectedCarId = SAVED_CAR.id
+	model.app.historyFilter = filter
+	model.data.serviceEntries = entries
+	Object.assign(model.inputs.serviceEntry, inputs)
+	model.inputs.errors = errors
+	derived.selectedCar = car
+	derived.history = carHistory(entries, SAVED_CAR.id, filter)
+	derived.today = "2026-10-26"
+	return { model, derived }
+}
+
+// Text with every run of spaces as one, since the markup wraps lines.
+const words = (el) => el.textContent.replace(/\s+/g, " ").trim()
+const carFacts = (main) => Object.fromEntries(facts(main.querySelector(".car-detail-quick-facts")))
+
+test("the car page shows make and model as the title, and the facts without empty ones", () => {
+	const { main } = mount(carScreen())
+	assert.equal(words(main.querySelector("h1")), "Volvo V70")
+	assert.equal(main.querySelector("h1").getAttribute("tabindex"), "-1")
+	assert.equal(main.querySelector(".car-detail-subtitle"), null)
+	assert.deepEqual(carFacts(main), {
+		Year: "2008",
+		Fuel: "Diesel",
+		"Registration number": "AB12345",
+	})
+})
+
+test("a nickname takes the title with make and model under it, and VIN and engine show when set", () => {
+	const car = { ...SAVED_CAR, nickname: "Svarten", vin: "YV1SW58D482712345", engine: "2.4 D5" }
+	const { main } = mount(carScreen({ car }))
+	assert.equal(words(main.querySelector("h1")), "Svarten")
+	assert.equal(words(main.querySelector(".car-detail-subtitle")), "Volvo V70")
+	assert.equal(carFacts(main).VIN, "YV1SW58D482712345")
+	assert.equal(carFacts(main).Engine, "2.4 D5")
+})
+
+test("the stat cards show the odometer in km and the EU-kontroll date in the chosen language", () => {
+	const stats = (lang, car) =>
+		[...mount(carScreen({ lang, car })).main.querySelectorAll(".car-stat-card")].map(words)
+	assert.deepEqual(stats("en"), ["Odometer 184,000 km", "EU inspection Mar 1, 2027"])
+	const [odometer, inspection] = stats("nb")
+	assert.match(odometer, /184\s000 km$/)
+	assert.match(inspection, /1\. mars 2027$/)
+	const [, noDate] = stats("en", { ...SAVED_CAR, euInspectionDue: null })
+	assert.equal(noDate, "EU inspection No date set")
+})
+
+test("the car page links to its service history with the total spent, and has no dead ends", () => {
+	const { main } = mount(carScreen())
+	const link = main.querySelector("[data-action='open-history']")
+	assert.equal(link.tagName, "A")
+	assert.equal(link.getAttribute("href"), "#history-c0")
+	assert.equal(link.dataset.id, "c0")
+	assert.equal(words(link), "Service records Total spent: NOK 3,900")
+	const controls = [...main.querySelectorAll("a, button")].map((el) => el.dataset.action)
+	assert.deepEqual(controls, ["back-garage", "open-history"]) // no edit, no "coming soon"
+})
+
+test("the history lists entries newest first with date, work, km, workshop, cost and notes", () => {
+	const { main } = mount(carScreen({ page: "history" }))
+	assert.equal(words(main.querySelector("h1")), "Service history")
+	assert.equal(words(main.querySelector("[data-action='back-car']")), "Back to Volvo V70")
+	assert.equal(
+		words(main.querySelector(".history-total")),
+		"Total spent on service records NOK 3,900"
+	)
+	const items = [...main.querySelectorAll(".history-list > li")]
+	assert.deepEqual(
+		items.map((li) => words(li.querySelector("h2"))),
+		["Brake pads", "Oil change"]
+	)
+	const [newest, oldest] = items
+	assert.equal(newest.querySelector("time").getAttribute("datetime"), "2026-03-14")
+	assert.equal(words(newest.querySelector("time")), "Mar 14, 2026")
+	assert.equal(words(newest.querySelector(".history-category")), "Repair")
+	assert.equal(words(newest.querySelector(".history-entry-mileage")), "182,500 km")
+	assert.equal(words(newest.querySelector(".history-entry-workshop")), "Workshop: Bilverksted AS")
+	assert.equal(words(newest.querySelector(".history-entry-cost")), "Cost: NOK 2,450")
+	assert.equal(words(newest.querySelector(".history-entry-notes")), "Front axle")
+	assert.equal(oldest.querySelector(".history-entry-workshop"), null)
+	assert.equal(oldest.querySelector(".history-entry-notes"), null)
+})
+
+test("history dates and costs follow the chosen language", () => {
+	const { main } = mount(carScreen({ page: "history", lang: "nb" }))
+	const newest = main.querySelector(".history-list > li")
+	assert.equal(words(newest.querySelector("time")), "14. mars 2026")
+	assert.match(words(newest.querySelector(".history-entry-cost")), /^Kostnad: 2\s450 kr$/)
+})
+
+test("the history filter is a labelled select with All first and the current filter selected", () => {
+	const { main } = mount(carScreen({ page: "history", filter: "repair" }))
+	const select = main.querySelector("select#history-filter")
+	assert.equal(select.dataset.change, "history-filter")
+	assert.ok(main.querySelector("label[for='history-filter']").textContent.trim())
+	assert.deepEqual(
+		[...select.options].map((o) => o.value),
+		["all", "service", "repair", "other"]
+	)
+	assert.equal(select.value, "repair")
+	assert.deepEqual([...main.querySelectorAll(".history-list h2")].map(words), ["Brake pads"])
+})
+
+test("an empty history says so, tells an empty filter apart and always offers Register service", () => {
+	const empty = mount(carScreen({ page: "history", entries: [] })).main
+	assert.equal(words(empty.querySelector(".history-empty")), "No service records yet.")
+	assert.ok(empty.querySelector("[data-action='register-service']"))
+	dom.window.close()
+	const filtered = mount(carScreen({ page: "history", filter: "other" })).main
+	assert.equal(words(filtered.querySelector(".history-empty")), "No records match this filter.")
+	assert.ok(filtered.querySelector("[data-action='register-service']"))
+})
+
+test("text typed into a service entry is shown as text, never as HTML", () => {
+	const entries = [{ ...ENTRIES[1], title: "<img src=x onerror=alert(1)>", notes: "<b>bold</b>" }]
+	const { main } = mount(carScreen({ page: "history", entries }))
+	assert.equal(main.querySelector(".history-list img, .history-list b"), null)
+	assert.equal(words(main.querySelector(".history-list h2")), "<img src=x onerror=alert(1)>")
+})
+
+test("the service form has every field in order, labelled, with optional ones marked", () => {
+	const { main } = mount(carScreen({ page: "serviceForm" }))
+	assert.equal(words(main.querySelector("h1")), "Register service")
+	assert.equal(words(main.querySelector(".service-form-car")), "Volvo V70 · 2008")
+	const fields = [...main.querySelectorAll("form [data-field]")]
+	assert.deepEqual(
+		fields.map((el) => el.dataset.field),
+		["category", "title", "date", "mileage", "cost", "workshop", "notes"]
+	)
+	for (const el of fields) {
+		assert.equal(el.dataset.input, "service-entry-input")
+		assert.ok(main.querySelector(`label[for='${el.id}']`), `${el.id} has no label`)
+	}
+	const optional = fields
+		.filter((el) => words(main.querySelector(`label[for='${el.id}']`)).endsWith("(optional)"))
+		.map((el) => el.dataset.field)
+	assert.deepEqual(optional, ["workshop", "notes"])
+	assert.deepEqual(
+		[...main.querySelector("#service-category").options].map((o) => o.value),
+		["service", "repair", "other"]
+	)
+	assert.equal(main.querySelector("#service-date").type, "date")
+	assert.equal(main.querySelector("#service-date").max, "2026-10-26")
+	assert.equal(main.querySelector("#service-date").getAttribute("lang"), null)
+	assert.equal(main.querySelector("#service-mileage").max, String(config.carMileageMax))
+	assert.equal(main.querySelector("form").dataset.submit, "save-service-entry")
+})
+
+test("service form errors sit under their fields and are tied to them, with what was typed kept", () => {
+	const errors = { title: "service.error.title", mileage: "service.error.mileage" }
+	const inputs = { category: "repair", mileage: "-3", notes: "Front axle" }
+	const { main } = mount(carScreen({ page: "serviceForm", errors, inputs }))
+	assert.equal(main.querySelector("#service-title").getAttribute("aria-invalid"), "true")
+	assert.equal(
+		main.querySelector("#service-title").getAttribute("aria-describedby"),
+		"service-title-error"
+	)
+	assert.equal(words(main.querySelector("#service-title-error")), "Enter the type of work.")
+	assert.equal(
+		words(main.querySelector("#service-mileage-error")),
+		"Enter the odometer in whole km, from 0 to 10,000,000."
+	)
+	assert.equal(main.querySelector("#service-date").getAttribute("aria-invalid"), null)
+	assert.equal(main.querySelector("#service-category").value, "repair")
+	assert.equal(main.querySelector("#service-mileage").value, "-3")
+	assert.equal(main.querySelector("#service-notes").value, "Front axle")
+})
+
+test("every car page has a way home when its car is gone", () => {
+	for (const page of ["car", "history", "serviceForm"]) {
+		const { main } = mount(carScreen({ page, car: null }))
+		assert.equal(words(main.querySelector("h1")), "Car not found", page)
+		assert.ok(main.querySelector("[data-action='back-garage']"), page)
+		dom.window.close()
+	}
 })

@@ -13,7 +13,7 @@
 import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
 import { createTranslator } from "../../i18n/index.js"
-import { carFormHints, resolvePreferences } from "../../src/controller/controller.js"
+import { carFormHints, carHistory, resolvePreferences } from "../../src/controller/controller.js"
 import { bundles, FALLBACK_LANG } from "../../src/locales/index.js"
 import { model as initialModel } from "../../src/model/model.js"
 import { createView } from "../../src/view/view.js"
@@ -76,10 +76,36 @@ const CAR = {
 }
 const CARS = [
 	{ ...CAR, id: "c0" },
-	{ ...CAR, id: "c1", nickname: "Weekend car", vin: "YV1SW61R021234567" },
+	{ ...CAR, id: "c1", nickname: "Weekend car", vin: "YV1SW61R021234567", engine: "2.4 D5" },
 ]
 
-// Every page the profile, add car and garage stories add, with the header row for the active
+// Two entries for the second car: one bare, one with every optional field.
+const ENTRIES = [
+	{
+		id: "e0",
+		carId: "c1",
+		category: "service",
+		title: "Oil change",
+		date: "2025-05-01",
+		mileage: 170000,
+		cost: 1450,
+		workshop: null,
+		notes: null,
+	},
+	{
+		id: "e1",
+		carId: "c1",
+		category: "repair",
+		title: "Brake pads",
+		date: "2026-03-14",
+		mileage: 182500,
+		cost: 2450,
+		workshop: "Bilverksted AS",
+		notes: "Front axle",
+	},
+]
+
+// Every page the profile, car and service stories add, with the header row for the active
 // profile where there is one.
 const PAGES = {
 	"the welcome page": { page: "profiles", profiles: [], active: null },
@@ -99,9 +125,54 @@ const PAGES = {
 		active: 0,
 		errors: { make: "car.error.make", year: "car.error.year", vin: "car.error.vin" },
 	},
+	"a car page": { page: "car", profiles: ["Malin"], active: 0, cars: CARS, selected: "c0" },
+	"a car page with a nickname, VIN and history": {
+		page: "car",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		selected: "c1",
+	},
+	"an empty service history": {
+		page: "history",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		selected: "c0",
+	},
+	"a service history with entries": {
+		page: "history",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		selected: "c1",
+	},
+	"the service form": {
+		page: "serviceForm",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		selected: "c0",
+	},
+	"the service form with errors": {
+		page: "serviceForm",
+		profiles: ["Malin"],
+		active: 0,
+		cars: CARS,
+		selected: "c0",
+		errors: { title: "service.error.title", date: "service.error.dateFuture" },
+	},
+	"a car page for a car that is gone": {
+		page: "car",
+		profiles: ["Malin"],
+		active: 0,
+		selected: "x",
+	},
 }
 
-for (const [name, { page, profiles, active, error, errors, cars = [] }] of Object.entries(PAGES)) {
+for (const [name, { page, profiles, active, error, errors, cars = [], selected }] of Object.entries(
+	PAGES
+)) {
 	test(`${name} has no axe violations`, async () => {
 		dom = createMount("en")
 		const view = createView({ header: dom.header, main: dom.mount }, i18n, MULTI_CURRENCY)
@@ -114,6 +185,12 @@ for (const [name, { page, profiles, active, error, errors, cars = [] }] of Objec
 		derived.profile = model.data.profiles[active] ?? null
 		derived.cars = cars
 		if (page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
+		if (selected) {
+			model.app.selectedCarId = selected
+			derived.selectedCar = cars.find((car) => car.id === selected) ?? null
+			derived.history = carHistory(ENTRIES, selected)
+			derived.today = "2026-10-26"
+		}
 		view.renderHeader(model, derived)
 		view.render(model, derived)
 		assert.ok(dom.mount.querySelector("h1"))
