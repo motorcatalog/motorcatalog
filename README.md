@@ -7,6 +7,8 @@
 
 A digital service book for your car: log maintenance, repairs and costs, and keep the full history in one place.
 
+**Try it:** [motorcatalog.github.io/motorcatalog](https://motorcatalog.github.io/motorcatalog/). Everything you enter stays in your own browser.
+
 ## Features
 
 Implemented so far:
