@@ -17,6 +17,7 @@ import {
 	carFormHints,
 	carHistory,
 	euInspectionStatus,
+	euReminderShows,
 	resolvePreferences,
 } from "../../src/controller/controller.js"
 import { bundles, FALLBACK_LANG } from "../../src/locales/index.js"
@@ -32,7 +33,10 @@ function screenFor(lang) {
 	const model = structuredClone(initialModel)
 	model.app.preferences.chosen.lang = lang
 	model.app.preferences.system = { lang: "nb", theme: "dark", currency: "NOK" }
-	return { model, derived: { ...resolvePreferences(model.app.preferences), cars: [] } }
+	return {
+		model,
+		derived: { ...resolvePreferences(model.app.preferences), cars: [], euReminders: [] },
+	}
 }
 
 let dom
@@ -130,6 +134,15 @@ const PAGES = {
 	},
 	"the garage with an active profile": { page: "garage", profiles: ["Malin"], active: 0 },
 	"the garage with cars": { page: "garage", profiles: ["Malin"], active: 0, cars: CARS },
+	"the garage with reminders": {
+		page: "garage",
+		profiles: ["Malin"],
+		active: 0,
+		cars: [
+			...CARS,
+			{ ...CAR, id: "c2", make: "Saab", model: "900", euInspectionDue: "2026-12-15" },
+		],
+	},
 	"the car form": { page: "carForm", profiles: ["Malin"], active: 0 },
 	"the car form with errors": {
 		page: "carForm",
@@ -233,6 +246,9 @@ for (const [
 		derived.euStatus = Object.fromEntries(
 			cars.map((c) => [c.id, euInspectionStatus(c.euInspectionDue, "2026-10-26", 3)])
 		)
+		derived.euReminders = cars
+			.filter((c) => euReminderShows(c, "2026-10-26", 3))
+			.map((c) => ({ car: c, status: derived.euStatus[c.id] }))
 		if (page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 		if (selected) {
 			model.app.selectedCarId = selected

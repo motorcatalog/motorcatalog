@@ -15,6 +15,7 @@ import {
 	carFormHints,
 	carHistory,
 	euInspectionStatus,
+	euReminderShows,
 	resolvePreferences,
 } from "../src/controller/controller.js"
 import { MAKES } from "../src/data/models.js"
@@ -75,6 +76,9 @@ function screen({
 			euStatus: Object.fromEntries(
 				profileCars.map((c) => [c.id, euInspectionStatus(c.euInspectionDue, TODAY, 3)])
 			),
+			euReminders: profileCars
+				.filter((c) => euReminderShows(c, TODAY, 3))
+				.map((c) => ({ car: c, status: euInspectionStatus(c.euInspectionDue, TODAY, 3) })),
 		}),
 	}
 }
@@ -447,6 +451,47 @@ test("a card with an EU-kontroll date shows it with its status in text and icon,
 	assert.equal(cards[3].querySelector(".eu-status"), null)
 	const nb = garage("nb", cars).querySelectorAll(".car-card .eu-status")
 	assert.deepEqual([...nb].map(words), ["I orden", "Snart frist", "Over fristen"])
+})
+
+test("the garage lists a reminder for each car with one due, above the cars, and none without", () => {
+	const cars = Object.values(EU_DATES).map((euInspectionDue, i) => ({
+		...VOLVO,
+		id: `c${i}`,
+		euInspectionDue,
+	}))
+	cars[1].nickname = "Weekend car"
+	const main = garage("en", [...cars, { ...VOLVO, id: "c9" }])
+	const section = main.querySelector("section.eu-reminders")
+	assert.equal(text(section.querySelector("h2")), bundles.en["reminders.title"])
+	assert.equal(section.getAttribute("aria-labelledby"), section.querySelector("h2").id)
+	assert.ok(section.compareDocumentPosition(main.querySelector(".car-list")) & 4) // before the cars
+	const rows = [...section.querySelectorAll("li.eu-reminder")]
+	assert.deepEqual(
+		rows.map((row) => words(row.querySelector("p"))),
+		[
+			"Weekend car EU inspection Jan 26, 2027 Due soon",
+			"Volvo V70 EU inspection Oct 25, 2026 Overdue",
+		]
+	)
+	const [link] = rows[0].querySelectorAll("a")
+	assert.equal(link.dataset.action, "open-car")
+	assert.equal(link.dataset.id, "c1")
+	assert.equal(link.getAttribute("href"), "#car-c1")
+	assert.equal(rows[1].querySelector(".eu-status").dataset.status, "overdue")
+	const dismiss = rows[0].querySelector("button")
+	assert.equal(dismiss.id, "dismiss-eu-c1")
+	assert.equal(dismiss.dataset.action, "dismiss-eu-reminder")
+	assert.equal(dismiss.dataset.id, "c1")
+	assert.equal(words(dismiss), "Dismiss the reminder for Weekend car")
+	assert.equal(text(dismiss.querySelector(".sr-only")), "the reminder for Weekend car")
+
+	const nb = garage("nb", cars).querySelector(".eu-reminders")
+	assert.equal(text(nb.querySelector("h2")), "Påminnelser")
+	assert.equal(words(nb.querySelector("button")), "Skjul påminnelsen for Weekend car")
+
+	assert.equal(garage("en", [cars[0], { ...VOLVO, id: "c9" }]).querySelector(".eu-reminders"), null)
+	const dismissed = { ...cars[2], euReminderDismissed: TODAY }
+	assert.equal(garage("en", [dismissed]).querySelector(".eu-reminders"), null)
 })
 
 test("the card follows the chosen language, numbers included", () => {

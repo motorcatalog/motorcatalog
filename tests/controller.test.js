@@ -15,9 +15,12 @@ import {
 	carFormHints,
 	carHistory,
 	createController,
+	currentEuReminder,
 	euInspectionStatus,
+	euReminderShows,
 	exportFile,
 	loadData,
+	localDateString,
 	resolveCountry,
 	resolvePreferences,
 	STORAGE_KEY,
@@ -173,6 +176,7 @@ test("first load resolves every preference from the browser when nothing is stor
 		profile: null,
 		cars: [],
 		euStatus: {},
+		euReminders: [],
 	}) // no matchMedia: the DS default
 	assert.equal(globalThis.document.documentElement.lang, "nb")
 	assert.equal(globalThis.document.documentElement.dataset.theme, "dark")
@@ -923,6 +927,7 @@ const SAVED_CAR = Object.freeze({
 	engine: null,
 	mileage: 184000,
 	euInspectionDue: null,
+	euReminderDismissed: null,
 })
 
 // Malin (active) owns c0 and c1, Rune owns c9.
@@ -1689,4 +1694,149 @@ test("Mark done and Save do nothing for a car without a date or one the profile 
 	}
 	assert.deepEqual(view.dialogs, [])
 	assert.equal(storage.items[STORAGE_KEY], before)
+})
+
+/* ----------------------------------------------------------------------
+   EU-kontroll reminders (#42). The 31.03.2027 date has reminders from
+   31.12.2026, 31.01.2027 and 28.02.2027 (February has no 31st), then
+   every Monday from 01.03.2027.
+   ---------------------------------------------------------------------- */
+
+test("currentEuReminder starts 3, 2 and 1 calendar months before the date", () => {
+	const start = (today) => currentEuReminder("2027-03-31", today, 3)
+	assert.equal(start("2026-12-30"), null) // not yet
+	assert.equal(start("2026-12-31"), "2026-12-31")
+	assert.equal(start("2027-01-30"), "2026-12-31")
+	assert.equal(start("2027-01-31"), "2027-01-31")
+	assert.equal(start("2027-02-27"), "2027-01-31")
+	assert.equal(start("2027-02-28"), "2027-02-28") // a Sunday, the last day of the month
+})
+
+test("currentEuReminder starts again every Monday after the 1-month reminder, also after the date", () => {
+	const start = (today) => currentEuReminder("2027-03-31", today, 3)
+	assert.equal(start("2027-03-01"), "2027-03-01") // the first Monday after 28.02
+	assert.equal(start("2027-03-07"), "2027-03-01") // the Sunday after it
+	assert.equal(start("2027-03-08"), "2027-03-08")
+	assert.equal(start("2027-03-31"), "2027-03-29") // the date itself
+	assert.equal(start("2027-04-14"), "2027-04-12") // overdue: still every Monday
+	// A 1-month reminder that falls on a Monday is that week's reminder.
+	assert.equal(currentEuReminder("2027-03-01", "2027-02-01", 3), "2027-02-01")
+	assert.equal(currentEuReminder("2027-03-01", "2027-02-07", 3), "2027-02-01")
+	assert.equal(currentEuReminder("2027-03-01", "2027-02-08", 3), "2027-02-08")
+})
+
+test("currentEuReminder shows the current reminder at once for a date set late or already passed", () => {
+	assert.equal(currentEuReminder("2027-01-15", "2026-12-02", 3), "2026-11-15") // 2 months reminder
+	assert.equal(currentEuReminder("2026-12-15", "2026-12-02", 3), "2026-11-30") // weekly already
+	assert.equal(currentEuReminder("2000-01-01", "2026-10-26", 3), "2026-10-26") // long overdue
+})
+
+test("currentEuReminder is null without a real date", () => {
+	for (const due of [null, undefined, "", "2027-02-30"]) {
+		assert.equal(currentEuReminder(due, "2026-10-26", 3), null, String(due))
+	}
+})
+
+test("euReminderShows hides a dismissed reminder until the next one starts", () => {
+	const car = (euReminderDismissed) => ({ euInspectionDue: "2027-03-31", euReminderDismissed })
+	const shows = (dismissed, today) => euReminderShows(car(dismissed), today, 3)
+	assert.equal(shows(null, "2026-12-31"), true)
+	assert.equal(shows(undefined, "2026-12-31"), true) // a car saved before the field existed
+	assert.equal(shows("2026-12-31", "2027-01-30"), false)
+	assert.equal(shows("2026-12-31", "2027-01-31"), true) // the 2-month reminder
+	assert.equal(shows("2027-03-01", "2027-03-07"), false)
+	assert.equal(shows("2027-03-01", "2027-03-08"), true) // the next Monday
+	assert.equal(shows(null, "2026-12-30"), false) // nothing due yet
+	assert.equal(euReminderShows({ euInspectionDue: null }, "2026-10-26", 3), false)
+})
+
+// Malin's c0 long overdue and c1 far ahead, Rune's c9 overdue too.
+function garageWithReminders(dismissed = null) {
+	const storage = garageWithEuDates("2000-01-01")
+	const data = storedData(storage)
+	data.cars[0].euReminderDismissed = dismissed
+	data.cars[1].euInspectionDue = "2999-12-31"
+	storage.items[STORAGE_KEY] = JSON.stringify(data)
+	return storage
+}
+
+const reminderIds = (view) => view.derived.euReminders.map((reminder) => reminder.car.id)
+
+test("the garage lists a reminder only for the active profile's cars that have one due", () => {
+	const { view } = boot(garageWithReminders())
+	assert.deepEqual(reminderIds(view), ["c0"])
+	const [reminder] = view.derived.euReminders
+	assert.equal(reminder.status, "overdue")
+	assert.equal(reminder.car.euInspectionDue, "2000-01-01")
+})
+
+test("Dismiss stores the reminder's start on the car, hides it and moves focus to the heading", () => {
+	const storage = garageWithReminders()
+	const { model, view } = boot(storage)
+	const headings = view.headings
+	view.handlers["dismiss-eu-reminder"](CLICK, { dataset: { id: "c0" } })
+	const dismissed = model.data.cars[0].euReminderDismissed
+	assert.equal(dismissed, currentEuReminder("2000-01-01", localDateString(), 3))
+	assert.deepEqual(storedData(storage), model.data)
+	assert.deepEqual(view.derived.euReminders, [])
+	assert.equal(view.headings, headings + 1)
+})
+
+test("Dismiss with another reminder left moves focus to that one's Dismiss button", () => {
+	const storage = garageWithReminders()
+	const data = storedData(storage)
+	data.cars[1].euInspectionDue = "2000-01-01"
+	storage.items[STORAGE_KEY] = JSON.stringify(data)
+	const { view } = boot(storage)
+	assert.deepEqual(reminderIds(view), ["c0", "c1"])
+	view.handlers["dismiss-eu-reminder"](CLICK, { dataset: { id: "c0" } })
+	assert.deepEqual(reminderIds(view), ["c1"])
+	assert.deepEqual(view.fields, ["dismiss-eu-c1"])
+})
+
+test("Dismiss does nothing for another profile's car or one with no reminder", () => {
+	const storage = garageWithReminders()
+	const before = storage.items[STORAGE_KEY]
+	const { view } = boot(storage)
+	for (const id of ["c9", "c1", "gone"]) {
+		view.handlers["dismiss-eu-reminder"](CLICK, { dataset: { id } })
+	}
+	assert.equal(storage.items[STORAGE_KEY], before)
+	assert.deepEqual(reminderIds(view), ["c0"])
+})
+
+test("Mark done clears the dismissed reminder, so the new date starts fresh", () => {
+	fakeHistory()
+	const storage = garageWithReminders("2026-10-26")
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["mark-eu-done"]()
+	view.handlers["eu-done-input"](null, { value: "2999-12-31" })
+	view.handlers["save-eu-done"]()
+	assert.equal(model.data.cars[0].euReminderDismissed, null)
+	assert.equal(storedData(storage).cars[0].euReminderDismissed, null)
+})
+
+test("a new EU-kontroll date in the car form clears the dismissed reminder; the same date keeps it", () => {
+	fakeHistory()
+	const storage = garageWithReminders("2026-10-26")
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	fillCar(view, { nickname: "Svarten" })
+	view.handlers["save-car"]()
+	assert.equal(model.data.cars[0].euReminderDismissed, "2026-10-26")
+	view.handlers["edit-car"]()
+	fillCar(view, { euInspectionDue: "2001-01-01" })
+	view.handlers["save-car"]()
+	assert.equal(model.data.cars[0].euReminderDismissed, null)
+})
+
+test("a new car starts with no dismissed reminder", () => {
+	const storage = fakeStorage({ [STORAGE_KEY]: dataWith(["Malin"]) })
+	const { model, view } = boot(storage)
+	view.handlers["add-car"]()
+	fillCar(view, TYPED)
+	view.handlers["save-car"]()
+	assert.equal(model.data.cars[0].euReminderDismissed, null)
 })
