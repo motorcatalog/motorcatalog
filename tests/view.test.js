@@ -793,25 +793,80 @@ test("the car page links to its service history with the total spent, and has no
 	assert.deepEqual(controls, [
 		"back-garage",
 		"open-history",
+		"mark-eu-done",
 		"edit-car",
 		"delete-car",
+		undefined, // Save date submits its form, data-submit="save-eu-done"
+		undefined, // each dialog's Cancel closes it without the controller
 		"confirm-delete-car",
-		undefined, // the dialog's Cancel closes it without the controller
+		undefined,
 	]) // no "coming soon"
 })
 
-test("the car page offers Edit and Delete on one row, each named by its text", () => {
+test("the car page offers Mark done, Edit and Delete on one row, each named by its text", () => {
 	const { main } = mount(carScreen())
 	const row = main.querySelector(".car-actions")
 	const buttons = [...row.querySelectorAll("button")]
-	assert.deepEqual(buttons.map(words), ["Edit car", "Delete car"])
+	assert.deepEqual(buttons.map(words), ["Mark EU inspection as done", "Edit car", "Delete car"])
 	assert.deepEqual(
 		buttons.map((b) => b.type),
-		["button", "button"]
+		["button", "button", "button"]
 	)
-	assert.ok(buttons[1].classList.contains("btn-danger"))
+	assert.equal(buttons[0].id, "mark-eu-done") // focus comes back here after the dialog
+	assert.ok(buttons[2].classList.contains("btn-danger"))
 	const nb = mount(carScreen({ lang: "nb" })).main.querySelector(".car-actions")
-	assert.deepEqual([...nb.querySelectorAll("button")].map(words), ["Rediger bil", "Slett bil"])
+	assert.deepEqual(
+		[...nb.querySelectorAll("button")].map(words),
+		["Marker EU-kontroll som utført", "Rediger bil", "Slett bil"]
+	)
+})
+
+test("a car without an EU-kontroll date has neither Mark done nor its dialog", () => {
+	const { main } = mount(carScreen({ car: { ...SAVED_CAR, euInspectionDue: null } }))
+	const buttons = [...main.querySelectorAll(".car-actions button")]
+	assert.deepEqual(buttons.map(words), ["Edit car", "Delete car"])
+	assert.equal(main.querySelector("#eu-done-dialog"), null)
+})
+
+test("the Mark done dialog asks for the next date as the model holds it, with Save and Cancel", () => {
+	const screen = carScreen()
+	screen.model.inputs.euDone.nextDue = "2029-03-01"
+	const { main } = mount(screen)
+	const dialog = main.querySelector("dialog#eu-done-dialog")
+	assert.equal(dialog.open, false) // only Mark done opens it
+	const title = main.querySelector(`#${dialog.getAttribute("aria-labelledby")}`)
+	assert.equal(words(title), "Mark EU inspection as done")
+	const text = main.querySelector(`#${dialog.getAttribute("aria-describedby")}`)
+	assert.match(words(text), /two years after the last date/)
+	const input = dialog.querySelector("input#eu-done-nextDue")
+	assert.equal(input.type, "date")
+	assert.equal(input.value, "2029-03-01")
+	assert.ok(input.required)
+	assert.ok(input.hasAttribute("autofocus")) // the dialog opens on the date
+	assert.equal(input.dataset.input, "eu-done-input")
+	assert.equal(words(dialog.querySelector("label[for='eu-done-nextDue']")), "Next EU inspection")
+	const form = dialog.querySelector("form[data-submit='save-eu-done']")
+	assert.ok(form.noValidate)
+	const save = dialog.querySelector("button.btn-primary")
+	assert.equal(words(save), "Save date")
+	assert.equal(save.type, "submit")
+	assert.equal(save.form, form)
+	const cancel = dialog.querySelector("form[method='dialog'] button")
+	assert.equal(words(cancel), "Cancel")
+	assert.equal(cancel.dataset.action, undefined)
+
+	const nb = mount(carScreen({ lang: "nb" })).main.querySelector("#eu-done-dialog")
+	assert.equal(words(nb.querySelector("h2")), "Marker EU-kontroll som utført")
+	assert.equal(words(nb.querySelector("label")), "Neste EU-kontroll")
+})
+
+test("an error in the Mark done dialog sits under the date and is tied to it", () => {
+	const { main } = mount(carScreen({ errors: { nextDue: "car.error.euDoneRequired" } }))
+	const input = main.querySelector("#eu-done-nextDue")
+	assert.equal(input.getAttribute("aria-invalid"), "true")
+	const error = main.querySelector(`#${input.getAttribute("aria-describedby")}`)
+	assert.equal(words(error), "Enter the date of the next EU inspection.")
+	assert.ok(error.classList.contains("field-error"))
 })
 
 test("the delete dialog names the car, starts on Cancel and closes itself on Cancel", () => {
