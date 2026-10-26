@@ -124,18 +124,23 @@ test("Switch profile opens the picker, and a second profile can be added and cho
 	await page.browserContext().close()
 })
 
-// The first finished download in `dir`. Chrome writes to a .crdownload
-// file first and renames it when the download is done.
+// The first finished JSON download in `dir`. Chrome writes to a
+// .crdownload file first, but on Windows the final name can show up
+// before its content is written, so a file only counts once it parses.
 async function nextDownload(dir, timeout = 5000) {
 	const end = Date.now() + timeout
 	while (Date.now() < end) {
 		const done = (await readdir(dir)).filter((f) => !f.endsWith(".crdownload"))
-		if (done.length > 0) {
-			return { name: done[0], text: await readFile(join(dir, done[0]), "utf8") }
+		for (const name of done) {
+			const text = await readFile(join(dir, name), "utf8")
+			try {
+				JSON.parse(text)
+				return { name, text }
+			} catch {} // still being written
 		}
 		await new Promise((r) => setTimeout(r, 50))
 	}
-	throw new Error(`no download in ${dir} after ${timeout} ms`)
+	throw new Error(`no complete download in ${dir} after ${timeout} ms`)
 }
 
 test("Export downloads a dated JSON file with the version, empty at first and then with every profile", async () => {
