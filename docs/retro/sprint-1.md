@@ -44,3 +44,4 @@ First sprint, so no earlier retro.
 
 | Action | Owner | Check at |
 |---|---|---|
+| Write a sprint goal on the board at every planning. | Both | Sprint 4 retro |

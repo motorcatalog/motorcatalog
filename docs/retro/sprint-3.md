@@ -24,7 +24,7 @@ We coded on screenshare and read each PR through together before it merged. No G
 
 ## Last retro's actions
 
-None. The Sprint 1 and Sprint 2 retros were held on the same day as this one, so all their actions start in Sprint 4.
+None. The Sprint 1 and Sprint 2 retros were held on the same day as this one, so all three actions start in Sprint 4.
 
 ## Went well
 
@@ -43,3 +43,4 @@ None. The Sprint 1 and Sprint 2 retros were held on the same day as this one, so
 
 | Action | Owner | Check at |
 |---|---|---|
+| The reader approves the PR in GitHub before it merges, so our review is on record. | The reader | Sprint 4 retro |

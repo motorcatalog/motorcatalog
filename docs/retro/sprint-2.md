@@ -38,3 +38,4 @@ None. This retro was held afterwards, on 29.10.
 
 | Action | Owner | Check at |
 |---|---|---|
+| When one of us works alone, write decisions that affect the other in the issue the same day, so feedback still comes along the way. | Whoever works alone | Sprint 4 retro |
