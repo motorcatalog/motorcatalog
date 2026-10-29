@@ -24,13 +24,20 @@ We coded on screenshare and read each PR through together before it merged. No G
 
 ## Last retro's actions
 
-No retro was held after Sprint 2.
+None. The Sprint 1 and Sprint 2 retros were held on the same day as this one, so all their actions start in Sprint 4.
 
 ## Went well
 
+- The sprint went quickly, because we planned well from the start.
+- We kept adding thoughts and ideas along the way, and used AI to sort them into issues and structure. It kept our workflow steady and organised. This has been true for all three sprints, not just this one.
+
 ## Did not go well
 
+- Nothing raised.
+
 ## Try next sprint
+
+- Keep planning together up front and adding ideas as they come up.
 
 ## Actions
 

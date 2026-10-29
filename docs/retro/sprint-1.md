@@ -1,7 +1,7 @@
 # Sprint 1 retrospective
 
 Sprint: 12.10 to 18.10.2026
-Held: not yet
+Held: 29.10.2026, looking back, together with the Sprint 3 retro
 
 ## Facts
 
@@ -26,9 +26,19 @@ First sprint, so no earlier retro.
 
 ## Went well
 
+- We knew from the start what we wanted to build.
+- We brainstormed and planned the project together, and both of us took part in every planning decision.
+- We learned GitHub Projects together. Neither of us had used it before, and we got the board working as a team.
+- Overall the process went well.
+
 ## Did not go well
 
+- Setting up the board took a lot of time. It was trial and error, since the tool was new to both of us.
+- Our CI check (Ward) failed on `main` from 15.10 to 16.10. Merge commits made in the GitHub web UI carried an email address the identity check did not allow. PR #33 fixed it, and `main` has been green since.
+
 ## Try next sprint
+
+- Nothing new was raised. We keep planning together.
 
 ## Actions
 

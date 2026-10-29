@@ -1,7 +1,7 @@
 # Sprint 2 retrospective
 
 Sprint: 19.10 to 25.10.2026
-Held: not yet
+Held: 29.10.2026, looking back, together with the Sprint 3 retro
 
 ## Facts
 
@@ -17,13 +17,22 @@ Not done: nothing carried over. PRs #34, #37 and #38 merged 22.10 before anyone 
 
 ## Last retro's actions
 
-No retro was held after Sprint 1.
+None. This retro was held afterwards, on 29.10.
 
 ## Went well
 
+- One of us was away that week, and the other built all three stories alone, so the sprint goal was met.
+- We reviewed the work together when we were both back, and fixed what we found in PR #39.
+
 ## Did not go well
 
+- A lot of the time went to styling.
+- Making decisions alone was harder. It works, but a choice made alone can shape the rest of the project before the other one has seen it.
+- Without the other person there was no ongoing feedback, and we could not talk through problems and ideas as they came up.
+
 ## Try next sprint
+
+- Keep giving each other feedback and talking things through along the way. We agree this is how we work best together.
 
 ## Actions
 
