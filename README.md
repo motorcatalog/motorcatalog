@@ -105,7 +105,7 @@ Headings (`h1` to `h4`) already use Fraunces. Colours and contrast rules: [`docs
 ## How we work
 
 - User stories live as issues on our GitHub Projects board.
-- We plan in short sprints, hold brief standups and close with a retro.
+- We plan in short sprints, hold brief standups and close each sprint with a retro. The notes live in [`docs/retro/`](docs/retro/).
 - Every change goes through a pull request and meets our Definition of Done before it merges to `main`.
 
 ## Status
