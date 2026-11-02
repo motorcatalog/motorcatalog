@@ -24,13 +24,15 @@ Implemented so far:
 - **EU inspection:** set the next EU inspection date and see on the car card whether it is OK, due soon (within three months) or overdue. A reminder shows at the top of the garage three, two and one month before, then every week until it is done. Mark it as done, and the next date is suggested two years on.
 - **Export:** download every profile on this device, with its cars and service records, as one JSON file.
 
-Planned for the first version:
+Planned next:
 
 - **Mileage warning:** get a warning before saving a mileage that looks wrong.
 - **Reminders:** see when the next service or tyre change is due, by date or by mileage.
 - **Cost overview:** see what each car has cost per year and per category.
 - **Import:** load an exported file to restore a backup or move your data to another device.
 - **Offline:** install it on your phone as a PWA and use it without a connection.
+- **Who did the work:** mark whether a workshop did the job or you did it yourself, and see maintenance costs on their own.
+- **To-do list:** keep a list of maintenance jobs for each car.
 
 ## Your data
 
@@ -44,8 +46,9 @@ Profiles keep data apart on a shared device. They are not a security feature: an
 - JavaScript (ES modules)
 - Tailwind CSS
 - localStorage
-- PWA (web app manifest and service worker)
-- Biome and node's built-in test runner
+- Web app manifest (the service worker for offline use is planned)
+- Biome
+- Node's built-in test runner, jsdom, axe-core and pa11y-ci
 
 The app follows MVC. The model holds data only, views render it, and controllers handle input and update the model.
 
@@ -88,7 +91,7 @@ All UI text lives in `src/locales/en.json` and `src/locales/nb.json`. Both files
 - `src/styles/main.css`: project styles that Tailwind classes do not cover.
 - `design-system/` and `i18n/`: shared foundation from my workbench. Read-only, never edit them here.
 - `public/`: icons and the web app manifest. The icons are copies from `docs/brand/`.
-- `tests/`: node's built-in test runner.
+- `tests/`: Node's built-in test runner.
 
 ## Styling with Tailwind
 
@@ -116,7 +119,9 @@ Headings (`h1` to `h4`) already use Fraunces. Colours and contrast rules: [`docs
 
 ## Status
 
-Sprints 1 to 3 are done: profiles, the garage, car details, editing and deleting cars, service history, service registration, EU inspection dates with reminders, and export. Sprint 4 (2.11 to 8.11.2026) brings editing and deleting service records, and the mileage checks.
+Version 1.0.0 (02.11.2026) is the frozen version our exams are based on. It covers Sprints 1 to 4: profiles, the garage, car details, editing and deleting cars, service history, registering, editing and deleting service records, the mileage checks, cost totals, EU inspection dates with reminders, and export. See the [release notes](https://github.com/motorcatalog/motorcatalog/releases/tag/v1.0.0).
+
+We keep building on it after the exam. The next stories are on the board.
 
 ## License
 
