@@ -228,7 +228,7 @@ The user can change the date before saving. It must be a real date and can't be 
 
 ### Deleting
 
-Deleting a car deletes its service entries and tasks. Deleting a profile deletes its cars, with their entries and tasks.
+Deleting a car deletes its service entries and tasks. Deleting a profile deletes its cars, with their entries and tasks. Deleting a service entry deletes only that entry and leaves the car's mileage as it is.
 
 ## Derived values
 

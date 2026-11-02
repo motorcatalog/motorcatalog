@@ -394,6 +394,11 @@ main h1[tabindex="-1"]:focus {
 	font-size: var(--text-sm);
 	font-variant-numeric: tabular-nums;
 }
+/* On a phone the date column leaves too little room for Edit and Delete
+   side by side, so they take the entry's full width under it. */
+.history-entry-actions {
+	grid-column: 1 / -1;
+}
 .history-empty {
 	padding-block: var(--space-5);
 	border-top: 1px solid var(--line);
@@ -448,8 +453,8 @@ main h1[tabindex="-1"]:focus {
 	}
 }
 
-/* The car page's dialogs: Delete asks first, and Mark done asks for the
-   next EU-kontroll date. .modal draws the box and centres it across. The
+/* The dialogs: Delete on the car page and on each service entry asks
+   first, and Mark done asks for the next EU-kontroll date. .modal draws the box and centres it across. The
    base reset zeroes every margin, so the auto block margins that centre a
    modal dialog top to bottom are put back here. */
 .car-dialog {
@@ -480,6 +485,9 @@ main h1[tabindex="-1"]:focus {
 	}
 	.history-register {
 		width: auto;
+	}
+	.history-entry-actions {
+		grid-column: 2;
 	}
 }
 

@@ -1520,6 +1520,214 @@ test("without the history API, Cancel and Save return to the car page and Delete
 	assert.deepEqual(ids(model.data.cars), ["c1", "c9"])
 })
 
+/* ----------------------------------------------------------------------
+   Edit and delete a service entry (#53). The same pattern as the car:
+   Edit opens the service form filled in, with its own history entry, and
+   Delete asks in the entry's own dialog first.
+   ---------------------------------------------------------------------- */
+
+// The service form as Edit fills it for entryOn("a", "2026-01-10").
+const ENTRY_INPUTS = Object.freeze({
+	category: "service",
+	title: "Work a",
+	date: "2026-01-10",
+	mileage: "180000",
+	cost: "1000",
+	workshop: "",
+	notes: "",
+})
+
+const editEntry = (view, id) => view.handlers["edit-service-entry"](null, { dataset: { id } })
+function deleteEntry(view, id) {
+	view.handlers["delete-service-entry"](null, { dataset: { id } })
+	view.handlers["confirm-delete-service-entry"](null, { dataset: { id } })
+}
+
+test("Edit on a service entry opens the form filled with its values, with its own history entry", () => {
+	const history = fakeHistory()
+	const { model, view } = boot(garageWith([entryOn("a", "2026-01-10")]))
+	openHistory(view, "c0")
+	editEntry(view, "a")
+	assert.equal(model.app.page, "serviceForm")
+	assert.equal(model.inputs.editingId, "a")
+	assert.deepEqual(model.inputs.serviceEntry, ENTRY_INPUTS)
+	assert.deepEqual(model.inputs.errors, {})
+	assert.equal(view.headings, 2)
+	assert.deepEqual(history.entries.at(-1), {
+		state: { page: "serviceForm", carId: "c0", entryId: "a" },
+		url: "#edit-service-a",
+	})
+})
+
+test("saving an edit updates the entry in place and returns to the unfiltered history", () => {
+	const history = fakeHistory()
+	const storage = garageWith([entryOn("a", "2026-01-10"), entryOn("b", "2026-02-10")])
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	view.handlers["history-filter"](null, { value: "service" })
+	editEntry(view, "a")
+	fillService(view, { ...SERVICE, mileage: "150000" })
+	view.handlers["save-service-entry"]()
+	assert.deepEqual(ids(model.data.serviceEntries), ["a", "b"])
+	assert.deepEqual(model.data.serviceEntries[0], {
+		id: "a",
+		carId: "c0",
+		category: "repair",
+		title: "New brake pads",
+		date: "2026-03-14",
+		mileage: 150000,
+		cost: 2450,
+		workshop: null,
+		notes: "Front axle",
+	})
+	assert.equal(model.data.cars[0].mileage, 184000) // a lower entry never lowers the car
+	assert.deepEqual(storedData(storage), model.data)
+	assert.equal(model.app.page, "history")
+	assert.equal(model.app.historyFilter, "all")
+	assert.equal(history.index, 1) // the form's entry was left with Back
+	assert.equal(model.inputs.editingId, null)
+	view.handlers["register-service"]()
+	assert.deepEqual(model.inputs.serviceEntry, initialModel.inputs.serviceEntry)
+	assert.equal(model.inputs.editingId, null) // Register after an edit adds a new entry
+})
+
+test("an invalid edit shows the same errors as registering and changes nothing", () => {
+	fakeHistory()
+	const storage = garageWith([entryOn("a", "2026-01-10")])
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	editEntry(view, "a")
+	fillService(view, { title: " ", date: "2999-01-01" })
+	view.handlers["save-service-entry"]()
+	assert.deepEqual(model.inputs.errors, {
+		title: "service.error.title",
+		date: "service.error.dateFuture",
+	})
+	assert.deepEqual(view.fields, ["service-title"])
+	assert.equal(model.app.page, "serviceForm")
+	assert.equal(model.inputs.editingId, "a")
+	assert.equal(model.data.serviceEntries[0].title, "Work a")
+	assert.equal(storage.items[STORAGE_KEY], before)
+})
+
+test("Cancel on an edit returns to the history without saving", () => {
+	const history = fakeHistory()
+	const storage = garageWith([entryOn("a", "2026-01-10")])
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	editEntry(view, "a")
+	fillService(view, { title: "Typed, never saved" })
+	view.handlers["cancel-service-entry"]()
+	assert.equal(model.app.page, "history")
+	assert.equal(history.index, 1)
+	assert.equal(storage.items[STORAGE_KEY], before)
+	assert.equal(model.inputs.editingId, null)
+	assert.deepEqual(model.inputs.serviceEntry, initialModel.inputs.serviceEntry)
+})
+
+test("a reload, Back or Forward onto an edit fills the form again from the saved entry", () => {
+	const history = fakeHistory()
+	const storage = garageWith([entryOn("a", "2026-01-10")])
+	const first = boot(storage)
+	openHistory(first.view, "c0")
+	editEntry(first.view, "a")
+	fillService(first.view, { title: "Typed, never saved" })
+	const { model, view } = reload(storage)
+	assert.equal(model.app.page, "serviceForm")
+	assert.equal(model.inputs.editingId, "a")
+	assert.deepEqual(model.inputs.serviceEntry, ENTRY_INPUTS)
+	fillService(view, { title: "Typed again" })
+	history.back()
+	assert.equal(model.app.page, "history")
+	history.forward()
+	assert.equal(model.inputs.editingId, "a")
+	assert.deepEqual(model.inputs.serviceEntry, ENTRY_INPUTS)
+})
+
+test("Forward onto the edit of a deleted entry opens the car's history and fixes the address", () => {
+	const history = fakeHistory()
+	const storage = garageWith([entryOn("a", "2026-01-10")])
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	editEntry(view, "a")
+	view.handlers["cancel-service-entry"]()
+	deleteEntry(view, "a")
+	history.forward()
+	assert.equal(model.app.page, "history")
+	assert.equal(model.inputs.editingId, null)
+	assert.deepEqual(history.entries.at(-1), {
+		state: { page: "history", carId: "c0" },
+		url: "#history-c0",
+	})
+	assert.equal(reload(storage).model.app.page, "history")
+})
+
+test("a reload on the edit of an entry that is gone opens the car's history", () => {
+	const history = fakeHistory({ page: "serviceForm", carId: "c0", entryId: "gone" })
+	const { model } = boot(garageWith())
+	assert.equal(model.app.page, "history")
+	assert.equal(model.app.selectedCarId, "c0")
+	assert.equal(model.inputs.editingId, null)
+	assert.deepEqual(history.entries[0], {
+		state: { page: "history", carId: "c0" },
+		url: "#history-c0",
+	})
+})
+
+test("Delete on an entry opens its dialog, and Confirm deletes only that entry and focuses the heading", () => {
+	const history = fakeHistory()
+	const storage = garageWith([
+		entryOn("a", "2026-01-10"),
+		entryOn("b", "2026-02-10"),
+		entryOn("x", "2026-02-10", { carId: "c1" }),
+	])
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	view.handlers["delete-service-entry"](null, { dataset: { id: "a" } })
+	assert.deepEqual(view.dialogs, ["open delete-entry-a"])
+	assert.equal(storage.items[STORAGE_KEY], before) // nothing changes before Confirm
+	const headings = view.headings
+	view.handlers["confirm-delete-service-entry"](null, { dataset: { id: "a" } })
+	assert.deepEqual(ids(model.data.serviceEntries), ["b", "x"])
+	assert.deepEqual(storedData(storage), model.data)
+	assert.deepEqual(view.dialogs, ["open delete-entry-a", "close delete-entry-a"])
+	assert.equal(model.app.page, "history")
+	assert.deepEqual(ids(view.derived.history.shown), ["b"])
+	assert.equal(view.headings, headings + 1)
+	assert.equal(model.data.cars[0].mileage, 184000)
+	assert.equal(history.index, 1) // still on the history's own entry
+})
+
+test("Edit, Delete and Save can't reach an entry on another car or another profile's car", () => {
+	const history = fakeHistory()
+	const storage = garageWith([
+		entryOn("a", "2026-01-10"),
+		entryOn("b", "2026-02-10", { carId: "c1" }),
+		entryOn("z", "2026-02-10", { carId: "c9" }),
+	])
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	const entries = history.entries.length
+	for (const id of ["b", "z", "nope"]) {
+		editEntry(view, id)
+		deleteEntry(view, id)
+	}
+	assert.equal(model.app.page, "history")
+	assert.equal(model.inputs.editingId, null)
+	assert.equal(history.entries.length, entries)
+	assert.deepEqual(view.dialogs, [])
+	view.handlers["register-service"]()
+	model.inputs.editingId = "z"
+	fillService(view, SERVICE)
+	view.handlers["save-service-entry"]()
+	assert.deepEqual(ids(model.data.serviceEntries), ["a", "b", "z"])
+	assert.equal(storage.items[STORAGE_KEY], before)
+})
+
 // ---- Export (#26) ----
 
 test("exportFile names the file by the local date and holds the data as JSON with its version", () => {
