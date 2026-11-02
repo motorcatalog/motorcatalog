@@ -17,15 +17,16 @@ Implemented so far:
 - **Garage and car details:** add cars, then open a car to see its make, model, year, fuel, registration number, VIN, mileage and EU inspection date.
 - **Edit and delete cars:** change a car's details, or delete it with all its records after a confirmation.
 - **Service history:** view a car's service, repair and other records newest first, and filter by category.
-- **Register service:** record the category, work, date, mileage, cost, and optional workshop and notes. The car's mileage updates when a new record has a higher reading.
+- **Register service:** record the category, work, date, mileage, cost, and optional workshop and notes. The car's mileage goes up when a new or edited record has a higher reading.
 - **Edit and delete service records:** fix a record after it is saved, or delete it after a confirmation.
+- **Mileage in step:** the car page, the garage and the service history show the same mileage. Editing a car can't take it below its highest service record, and the error names that record.
 - **Cost total:** see the total spent on a car's service records from its details or service history.
 - **EU inspection:** set the next EU inspection date and see on the car card whether it is OK, due soon (within three months) or overdue. A reminder shows at the top of the garage three, two and one month before, then every week until it is done. Mark it as done, and the next date is suggested two years on.
 - **Export:** download every profile on this device, with its cars and service records, as one JSON file.
 
 Planned for the first version:
 
-- **Mileage checks:** see the same mileage everywhere, and get a warning before saving one that looks wrong.
+- **Mileage warning:** get a warning before saving a mileage that looks wrong.
 - **Reminders:** see when the next service or tyre change is due, by date or by mileage.
 - **Cost overview:** see what each car has cost per year and per category.
 - **Import:** load an exported file to restore a backup or move your data to another device.
