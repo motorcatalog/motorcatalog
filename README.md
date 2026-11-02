@@ -20,7 +20,7 @@ Implemented so far:
 - **Register service:** record the category, work, date, mileage, cost, and optional workshop and notes. The car's mileage goes up when a new or edited record has a higher reading.
 - **Edit and delete service records:** fix a record after it is saved, or delete it after a confirmation.
 - **Mileage in step:** the car page, the garage and the service history show the same mileage. Editing a car can't take it below its highest service record, and the error names that record.
-- **Cost total:** see the total spent on a car's service records from its details or service history.
+- **Cost totals:** see the total spent on a car's service records from its details or service history, and the total for all the cars in the profile in the garage.
 - **EU inspection:** set the next EU inspection date and see on the car card whether it is OK, due soon (within three months) or overdue. A reminder shows at the top of the garage three, two and one month before, then every week until it is done. Mark it as done, and the next date is suggested two years on.
 - **Export:** download every profile on this device, with its cars and service records, as one JSON file.
 

@@ -22,6 +22,7 @@ import {
 	highestServiceEntry,
 	loadData,
 	localDateString,
+	profileTotalCost,
 	resolveCountry,
 	resolvePreferences,
 	STORAGE_KEY,
@@ -1559,6 +1560,44 @@ test("confirming deletes the car with its service entries and tasks, then return
 	assert.equal(model.app.page, "garage")
 	assert.equal(reload(storage).model.app.page, "garage")
 	assert.equal(history.state, null)
+})
+
+test("profileTotalCost adds up the entries on the given cars only, 0 with none", () => {
+	const cars = [{ id: "c0" }, { id: "c1" }]
+	const entries = [
+		entryOn("a", "2026-01-10", { cost: 1450 }),
+		entryOn("b", "2026-02-10", { cost: 2450, carId: "c1" }),
+		entryOn("x", "2026-03-10", { cost: 99999, carId: "c9" }),
+	]
+	assert.equal(profileTotalCost(entries, cars), 3900)
+	assert.equal(profileTotalCost([], cars), 0)
+	assert.equal(profileTotalCost(entries, []), 0)
+})
+
+test("the garage total covers the active profile's cars and follows a new record and a deleted car", () => {
+	fakeHistory()
+	const storage = garageWith([
+		entryOn("a", "2026-01-10", { cost: 1000 }),
+		entryOn("b", "2026-02-10", { cost: 500, carId: "c1" }),
+		entryOn("x", "2026-03-10", { cost: 99999, carId: "c9" }), // another profile's car
+	])
+	const { model, view } = boot(storage)
+	assert.equal(model.app.page, "garage")
+	assert.equal(view.derived.totalCost, 1500)
+
+	openHistory(view, "c0")
+	view.handlers["register-service"]()
+	fillService(view, SERVICE) // costs 2450
+	view.handlers["save-service-entry"]()
+	view.handlers["back-garage"]()
+	assert.equal(model.app.page, "garage")
+	assert.equal(view.derived.totalCost, 3950)
+
+	openCar(view, "c1")
+	view.handlers["delete-car"]()
+	view.handlers["confirm-delete-car"]()
+	assert.equal(model.app.page, "garage")
+	assert.equal(view.derived.totalCost, 3450)
 })
 
 test("Delete and Confirm do nothing for a car the active profile doesn't own", () => {

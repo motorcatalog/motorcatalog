@@ -413,6 +413,13 @@ export function carHistory(entries, carId, filter = "all") {
 	}
 }
 
+// What every service entry on `cars` has cost together: the garage's
+// total for the active profile. Entries on other cars never count.
+export function profileTotalCost(entries, cars) {
+	const carIds = new Set(cars.map((car) => car.id))
+	return entries.reduce((total, entry) => total + (carIds.has(entry.carId) ? entry.cost : 0), 0)
+}
+
 // The pages that belong to one car, and the address each one shows. Each
 // visit is a browser history entry, so Back and Forward move between them.
 // The car form is one of them while it edits a car. Adding a car opens it
@@ -616,6 +623,9 @@ export function createController({ model, view, i18n, config, languages }) {
 				model.app.selectedCarId,
 				model.app.historyFilter
 			)
+		}
+		if (model.app.page === "garage") {
+			derived.totalCost = profileTotalCost(model.data.serviceEntries, cars)
 		}
 		if (model.app.page === "serviceForm") derived.today = today
 		if (model.app.page === "carForm") {

@@ -131,7 +131,8 @@ export function createView({ header, main }, i18n, config) {
 	}
 
 	// derived.cars is the active profile's cars, one card each, in the
-	// order they were added. With none, a short line says so.
+	// order they were added. With none, a short line says so. The total
+	// covers every car's service records, 0 when there are none.
 	function garagePage(_model, derived, t) {
 		const { cars } = derived
 		const km = new Intl.NumberFormat(derived.lang)
@@ -141,6 +142,7 @@ export function createView({ header, main }, i18n, config) {
 				<button class="btn btn-primary" type="button" data-action="add-car">${icon("plus")}<span>${esc(t("garage.addCar"))}</span></button>
 			</div>
 			${derived.euReminders.length > 0 ? euReminders(derived, t) : ""}
+			<p class="card cost-total garage-total"><span>${esc(t("garage.totalSpent"))}</span> <strong>${esc(formatMoney(derived.totalCost, derived.lang))}</strong></p>
 			${
 				cars.length === 0
 					? `<p class="garage-empty text-muted-foreground">${esc(t("garage.empty"))}</p>`
@@ -295,7 +297,7 @@ export function createView({ header, main }, i18n, config) {
 			<button class="btn btn-ghost car-back" type="button" data-action="back-car">${backIcon()}<span>${esc(t("history.backToCar", { car: carTitle(car) }))}</span></button>
 			<h1 class="history-title" tabindex="-1">${esc(t("history.title"))}</h1>
 			<p class="history-intro text-muted-foreground">${esc(t("history.intro"))}</p>
-			<p class="card history-total"><span>${esc(t("history.totalSpent"))}</span> <strong>${esc(formatMoney(totalCost, derived.lang))}</strong></p>
+			<p class="card cost-total history-total"><span>${esc(t("history.totalSpent"))}</span> <strong>${esc(formatMoney(totalCost, derived.lang))}</strong></p>
 			<div class="history-controls">
 				<div class="field history-filter-field">
 					<label class="sr-only" for="history-filter">${esc(t("history.filter.label"))}</label>

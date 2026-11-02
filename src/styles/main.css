@@ -326,7 +326,7 @@ main h1[tabindex="-1"]:focus {
 .history-intro {
 	margin-top: var(--space-2);
 }
-.history-total {
+.cost-total {
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
@@ -335,7 +335,11 @@ main h1[tabindex="-1"]:focus {
 	padding: var(--space-3);
 	font-variant-numeric: tabular-nums;
 }
-.history-total strong {
+/* The garage is a stack, so its gap already spaces the card. */
+.garage-total {
+	margin-top: 0;
+}
+.cost-total strong {
 	color: var(--accent);
 	font-size: var(--text-lg);
 }
