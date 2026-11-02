@@ -246,6 +246,7 @@ The controller works these out from the model each time it renders. They are nev
 | Service history, filtered and newest first | `serviceEntries` for the car and `app.historyFilter` |
 | Cost totals per category and year | `cost` summed by `category` for `app.costsYear` |
 | The cars in the garage | `cars` where `profileId` is `activeProfileId` |
+| The garage's total spent | `cost` summed over the `serviceEntries` of the cars in the garage, 0 with none |
 
 ### EU-kontroll status
 

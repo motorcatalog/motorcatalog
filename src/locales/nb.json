@@ -23,6 +23,7 @@
 	"garage.title": "Min garasje",
 	"garage.empty": "Ingen biler ennå.",
 	"garage.addCar": "Legg til bil",
+	"garage.totalSpent": "Totalt brukt på alle biler",
 	"garage.yearFuel": "{year} · {fuel}",
 	"garage.regNumber": "Reg.nr.",
 	"garage.vin": "Understellsnr.",

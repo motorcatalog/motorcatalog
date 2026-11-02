@@ -16,6 +16,7 @@ import {
 	carHistory,
 	euInspectionStatus,
 	euReminderShows,
+	profileTotalCost,
 	resolvePreferences,
 } from "../src/controller/controller.js"
 import { MAKES } from "../src/data/models.js"
@@ -49,6 +50,7 @@ function screen({
 	cars = [],
 	car = {},
 	carErrors = null,
+	entries = [],
 } = {}) {
 	const model = structuredClone(initialModel)
 	Object.assign(model.app.preferences.chosen, chosen)
@@ -65,6 +67,7 @@ function screen({
 	if (carErrors) model.inputs.errors = carErrors
 	Object.assign(model.inputs.car, car)
 	model.data.cars = cars
+	model.data.serviceEntries = entries
 	const profile = model.data.profiles.find((p) => p.id === model.data.activeProfileId) ?? null
 	const profileCars = cars.filter((c) => c.profileId === model.data.activeProfileId)
 	return {
@@ -83,8 +86,12 @@ function screen({
 	}
 }
 
-// The controller adds the car form's hints while that page is open.
+// The controller adds the garage total and the car form's hints while
+// their page is open.
 function carFormDerived(model, derived) {
+	if (model.app.page === "garage") {
+		derived.totalCost = profileTotalCost(model.data.serviceEntries, derived.cars)
+	}
 	if (model.app.page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
 	return derived
 }
@@ -387,6 +394,24 @@ test("the garage has its heading, Add car and an empty line until the profile ha
 	)
 	assert.equal(own.main.querySelector(".garage-empty"), null)
 	assert.ok(own.main.querySelector("[data-action='add-car']"))
+})
+
+test("the garage shows what the profile's cars have cost together, in each language's money format", () => {
+	const cost = (id, carId, amount) => ({ id, carId, cost: amount })
+	const entries = [cost("e0", "c0", 1450), cost("e1", "c1", 2450), cost("e9", "c9", 99999)]
+	const cars = [VOLVO, { ...VOLVO, id: "c1" }, { ...VOLVO, id: "c9", profileId: "p1" }]
+	for (const [lang, total, none] of [
+		["en", "NOK 3,900", "NOK 0"],
+		["nb", "3 900 kr", "0 kr"],
+	]) {
+		const form = { chosen: { lang }, page: "garage", profiles: ["Malin", "Rune"], active: 0 }
+		const main = mount(screen({ ...form, cars, entries })).main
+		const card = main.querySelector(".garage-total")
+		assert.equal(text(card.querySelector("span")), bundles[lang]["garage.totalSpent"], lang)
+		assert.equal(words(card.querySelector("strong")), total, lang) // another profile's car never counts
+		const empty = mount(screen({ ...form, cars: [VOLVO] })).main
+		assert.equal(words(empty.querySelector(".garage-total strong")), none, lang)
+	}
 })
 
 test("a car card shows make and model, year and fuel, the registration number and the odometer", () => {

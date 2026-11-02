@@ -23,6 +23,7 @@
 	"garage.title": "My garage",
 	"garage.empty": "No cars yet.",
 	"garage.addCar": "Add car",
+	"garage.totalSpent": "Total spent on all cars",
 	"garage.yearFuel": "{year} · {fuel}",
 	"garage.regNumber": "Reg. no.",
 	"garage.vin": "VIN",
