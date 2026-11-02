@@ -1,7 +1,7 @@
 # Sprint 4 retrospective
 
 Sprint: 02.11 to 08.11.2026
-Held:
+Held: 02.11.2026
 
 ## Facts
 
@@ -27,11 +27,19 @@ Not done: #65, this retro, closes when these notes merge.
 
 ## Went well
 
+- Every sprint so far has finished within a week.
+- This sprint we finished every story.
+
 ## Did not go well
 
+- #69 merged without an approval in GitHub.
+
 ## Try next sprint
+
+- Approve every PR before it merges, small config changes too.
 
 ## Actions
 
 | Action | Owner | Check at |
 |---|---|---|
+| The reader approves the PR in GitHub before it merges, so our review is on record. Carried over from Sprint 3. | The reader | Next retro |
