@@ -1057,6 +1057,66 @@ test("service form errors sit under their fields and are tied to them, with what
 	assert.equal(main.querySelector("#service-notes").value, "Front axle")
 })
 
+test("each history entry has Edit and Delete, named by the entry for a screen reader", () => {
+	const { main } = mount(carScreen({ page: "history" }))
+	const [newest] = main.querySelectorAll(".history-list > li")
+	const buttons = [...newest.querySelectorAll(".history-entry-actions button")]
+	assert.deepEqual(
+		buttons.map((b) => [b.dataset.action, b.dataset.id, b.type]),
+		[
+			["edit-service-entry", "e1", "button"],
+			["delete-service-entry", "e1", "button"],
+		]
+	)
+	assert.deepEqual(buttons.map(words), [
+		"Edit Brake pads from Mar 14, 2026",
+		"Delete Brake pads from Mar 14, 2026",
+	])
+	assert.deepEqual(
+		buttons.map((b) => words(b.querySelector(":scope > span").firstChild)),
+		["Edit", "Delete"]
+	) // the visible text, before the screen reader's part
+	assert.ok(buttons[1].classList.contains("btn-danger"))
+	const nb = mount(carScreen({ page: "history", lang: "nb" })).main
+	assert.deepEqual(
+		[...nb.querySelector(".history-entry-actions").querySelectorAll("button")].map(words),
+		["Rediger Brake pads fra 14. mars 2026", "Slett Brake pads fra 14. mars 2026"]
+	)
+})
+
+test("an entry's delete dialog names it, starts on Cancel and sits outside the list", () => {
+	const { main } = mount(carScreen({ page: "history" }))
+	const dialog = main.querySelector("dialog#delete-entry-e0")
+	assert.equal(dialog.open, false) // only Delete opens it
+	assert.equal(dialog.closest(".history-list"), null)
+	assert.equal(main.querySelectorAll("dialog").length, ENTRIES.length)
+	const title = main.querySelector(`#${dialog.getAttribute("aria-labelledby")}`)
+	assert.equal(words(title), "Delete Oil change from May 1, 2025?")
+	const text = main.querySelector(`#${dialog.getAttribute("aria-describedby")}`)
+	assert.equal(words(text), "The service record is deleted. This cannot be undone.")
+	const cancel = dialog.querySelector("form[method='dialog'] button[autofocus]")
+	assert.equal(words(cancel), "Cancel")
+	const confirm = dialog.querySelector("[data-action='confirm-delete-service-entry']")
+	assert.equal(confirm.dataset.id, "e0")
+	assert.equal(words(confirm), "Delete")
+	assert.ok(confirm.classList.contains("btn-danger"))
+
+	const entries = [{ ...ENTRIES[0], title: "<b>Oil</b>" }]
+	const named = mount(carScreen({ page: "history", entries, lang: "nb" })).main
+	assert.equal(words(named.querySelector("dialog h2")), "Slette <b>Oil</b> fra 1. mai 2025?")
+})
+
+test("the service form says Edit service while editing, and Register service otherwise", () => {
+	const heading = (lang, editingId) => {
+		const form = carScreen({ page: "serviceForm", lang })
+		form.model.inputs.editingId = editingId
+		return words(mount(form).main.querySelector("h1"))
+	}
+	assert.equal(heading("en", "e0"), "Edit service")
+	assert.equal(heading("en", null), "Register service")
+	assert.equal(heading("nb", "e0"), "Rediger service")
+})
+
 test("every car page has a way home when its car is gone", () => {
 	for (const page of ["car", "history", "serviceForm"]) {
 		const { main } = mount(carScreen({ page, car: null }))

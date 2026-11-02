@@ -45,32 +45,49 @@ const CAR = {
 	euInspectionDue: "2027-03-01",
 }
 
-// A fresh page in English on the garage, with two cars and no history.
-async function openGarage() {
+const ENTRY = {
+	id: "e0",
+	carId: "c0",
+	category: "service",
+	title: "Oil change",
+	date: "2025-05-01",
+	mileage: 170000,
+	cost: 1450,
+	workshop: null,
+	notes: null,
+}
+
+// A fresh page in English on the garage, with two cars and the given
+// service entries, none by default.
+async function openGarage(serviceEntries = []) {
 	const context = await browser.createBrowserContext()
 	const page = await context.newPage()
 	// Reduced motion makes the design system scroll instantly. On Linux the
 	// smooth scroll to the focused heading after a page change can still be
 	// running when Puppeteer clicks, so the click lands on another row.
 	await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }])
-	await page.evaluateOnNewDocument((car) => {
-		localStorage.setItem("lang", "en")
-		if (localStorage.getItem("motorcatalog")) return // keep what a test saved
-		localStorage.setItem(
-			"motorcatalog",
-			JSON.stringify({
-				version: 1,
-				activeProfileId: "p0",
-				profiles: [{ id: "p0", name: "Malin" }],
-				cars: [
-					{ ...car, id: "c0" },
-					{ ...car, id: "c1", make: "Toyota", model: "Corolla" },
-				],
-				serviceEntries: [],
-				tasks: [],
-			})
-		)
-	}, CAR)
+	await page.evaluateOnNewDocument(
+		(car, serviceEntries) => {
+			localStorage.setItem("lang", "en")
+			if (localStorage.getItem("motorcatalog")) return // keep what a test saved
+			localStorage.setItem(
+				"motorcatalog",
+				JSON.stringify({
+					version: 1,
+					activeProfileId: "p0",
+					profiles: [{ id: "p0", name: "Malin" }],
+					cars: [
+						{ ...car, id: "c0" },
+						{ ...car, id: "c1", make: "Toyota", model: "Corolla" },
+					],
+					serviceEntries,
+					tasks: [],
+				})
+			)
+		},
+		CAR,
+		serviceEntries
+	)
 	await page.goto(origin, { waitUntil: "networkidle0" })
 	await page.waitForSelector("#main h1")
 	await page.bringToFront()
@@ -185,6 +202,57 @@ test("an empty service form shows each error and focuses the first; Cancel saves
 	await page.click("form [data-action='cancel-service-entry']")
 	await waitForH1(page, en["history.title"])
 	assert.deepEqual((await saved(page)).serviceEntries, [])
+	await page.browserContext().close()
+})
+
+test("an entry is edited from the history, also after a reload, and Save updates it in place", async () => {
+	const page = await openGarage([ENTRY])
+	await openCar(page, "c0", "Volvo V70")
+	await openHistory(page)
+	await page.click("[data-action='edit-service-entry'][data-id='e0']")
+	await waitForH1(page, en["service.editTitle"])
+	assert.equal(new URL(page.url()).hash, "#edit-service-e0")
+	await page.reload({ waitUntil: "networkidle0" })
+	assert.equal(await h1(page), en["service.editTitle"])
+	assert.equal(await page.$eval("#service-title", (el) => el.value), "Oil change")
+	assert.equal(await page.$eval("#service-mileage", (el) => el.value), "170000")
+	await page.$eval("#service-title", (el) => el.select())
+	await page.type("#service-title", "Oil and filter")
+	await page.click("form button[type='submit']")
+	await waitForH1(page, en["history.title"])
+	const [entry, ...rest] = (await saved(page)).serviceEntries
+	assert.deepEqual(rest, [])
+	assert.deepEqual(entry, { ...ENTRY, title: "Oil and filter" })
+	assert.equal(
+		await page.$eval(".history-list li h2", (el) => el.textContent.trim()),
+		"Oil and filter"
+	)
+	await page.browserContext().close()
+})
+
+test("Delete on an entry asks first: Escape keeps it, Confirm removes it", async () => {
+	const page = await openGarage([ENTRY])
+	await openCar(page, "c0", "Volvo V70")
+	await openHistory(page)
+	const dialogOpen = () => page.$eval("#delete-entry-e0", (el) => el.open)
+	const focusedAction = () => page.evaluate(() => document.activeElement?.dataset.action ?? null)
+	await page.click("[data-action='delete-service-entry']")
+	assert.ok(await dialogOpen())
+	assert.equal(
+		await page.evaluate(() => document.activeElement.textContent.trim()),
+		en["car.cancel"]
+	)
+	await page.keyboard.press("Escape")
+	assert.equal(await dialogOpen(), false)
+	assert.equal(await focusedAction(), "delete-service-entry") // back on Delete
+	assert.equal((await saved(page)).serviceEntries.length, 1)
+
+	await page.click("[data-action='delete-service-entry']")
+	await page.click("[data-action='confirm-delete-service-entry']")
+	await page.waitForSelector("#main .history-empty")
+	assert.deepEqual((await saved(page)).serviceEntries, [])
+	assert.equal(await focusedId(page), "h1")
+	assert.equal((await saved(page)).cars[0].mileage, CAR.mileage)
 	await page.browserContext().close()
 })
 

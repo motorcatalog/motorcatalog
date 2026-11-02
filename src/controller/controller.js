@@ -11,7 +11,8 @@
    never stored, so they never go stale.
 
    A car's pages each get a browser history entry (CAR_PAGES), so the
-   browser's Back button, our back links and a reload all agree.
+   browser's Back button, our back links and a reload all agree. The
+   service form's entry also names the service entry it edits.
 
    The controller is the only layer that touches localStorage, and it does
    so through design-system/theme/preferences.js: the three keys "lang",
@@ -389,13 +390,15 @@ export function carHistory(entries, carId, filter = "all") {
 // The pages that belong to one car, and the address each one shows. Each
 // visit is a browser history entry, so Back and Forward move between them.
 // The car form is one of them while it edits a car. Adding a car opens it
-// from the garage without an entry of its own.
+// from the garage without an entry of its own. The service form shows
+// EDIT_SERVICE while it edits an entry.
 const CAR_PAGES = {
 	car: "car",
 	history: "history",
 	serviceForm: "register-service",
 	carForm: "edit-car",
 }
+const EDIT_SERVICE = "edit-service"
 
 const activeProfile = ({ profiles, activeProfileId }) =>
 	profiles.find((p) => p.id === activeProfileId) ?? null
@@ -497,6 +500,8 @@ export function createController({ model, view, i18n, config, languages }) {
 				openCarPage("history", target.dataset.id)
 			},
 			"register-service": () => openCarPage("serviceForm", model.app.selectedCarId),
+			"edit-service-entry": (_event, target) =>
+				openCarPage("serviceForm", model.app.selectedCarId, { entryId: target.dataset.id }),
 			"save-service-entry": saveServiceEntry,
 			"cancel-service-entry": () => leaveCarPage("serviceForm", "history"),
 			// No redraw while typing. The category select is validated on save.
@@ -525,6 +530,13 @@ export function createController({ model, view, i18n, config, languages }) {
 				if (ownCar(model.app.selectedCarId)) view.openDialog("delete-car-dialog")
 			},
 			"confirm-delete-car": deleteCar,
+			// Each history entry has its own delete dialog, which closes
+			// itself on Cancel and Escape in the same way.
+			"delete-service-entry": (_event, target) => {
+				const { id } = target.dataset
+				if (ownEntry(model.app.selectedCarId, id)) view.openDialog(`delete-entry-${id}`)
+			},
+			"confirm-delete-service-entry": (_event, target) => deleteServiceEntry(target.dataset.id),
 			// Like Delete, the dialog's own Cancel and Escape close it in the
 			// browser. Typing needs no redraw.
 			"mark-eu-done": openEuDone,
@@ -786,18 +798,30 @@ export function createController({ model, view, i18n, config, languages }) {
 	}
 
 	// Opens one of a car's pages. `push` adds a browser history entry that
-	// names the page and the car: all that Back, Forward or a reload needs
-	// to show it again. Another car starts its history unfiltered, the
-	// service form always starts empty, and the car form starts with the
-	// saved car. False when the car isn't ours.
-	function openCarPage(page, carId, { push = true } = {}) {
+	// names the page, the car and the service entry being edited: all that
+	// Back, Forward or a reload needs to show it again. Another car starts
+	// its history unfiltered, the service form starts empty or with the
+	// entry it edits, and the car form starts with the saved car. An edit
+	// of an entry that is gone opens the car's history instead. False when
+	// the car isn't ours.
+	function openCarPage(page, carId, { push = true, entryId = null } = {}) {
 		const car = ownCar(carId)
 		if (!Object.hasOwn(CAR_PAGES, page) || !car) return false
+		const entry = page === "serviceForm" && entryId ? ownEntry(carId, entryId) : null
+		if (entryId && !entry) {
+			replaceWithHistory(carId)
+			return openCarPage("history", carId, { push: false })
+		}
 		if (carId !== model.app.selectedCarId) model.app.historyFilter = "all"
 		model.app.selectedCarId = carId
 		if (page === "serviceForm") clearServiceEntryInputs()
+		if (entry) fillServiceInputs(entry)
 		if (page === "carForm") fillCarInputs(car)
-		if (push) globalThis.history?.pushState({ page, carId }, "", `#${CAR_PAGES[page]}-${carId}`)
+		if (push) {
+			const state = entry ? { page, carId, entryId: entry.id } : { page, carId }
+			const address = entry ? `${EDIT_SERVICE}-${entry.id}` : `${CAR_PAGES[page]}-${carId}`
+			globalThis.history?.pushState(state, "", `#${address}`)
+		}
 		go(page)
 		return true
 	}
@@ -825,7 +849,7 @@ export function createController({ model, view, i18n, config, languages }) {
 	// names. An entry without a car page, or for a car that isn't ours,
 	// leaves the car pages for the garage.
 	function showHistoryEntry(state) {
-		if (openCarPage(state?.page, state?.carId, { push: false })) return
+		if (openCarPage(state?.page, state?.carId, { push: false, entryId: state?.entryId })) return
 		if (Object.hasOwn(CAR_PAGES, model.app.page)) {
 			model.app.selectedCarId = null
 			go("garage")
@@ -833,20 +857,39 @@ export function createController({ model, view, i18n, config, languages }) {
 	}
 
 	// A reload keeps the browser's history entry, so the page it names opens
-	// again instead of the garage. The edit form starts again from the saved
-	// car. An entry for a car that is gone is replaced, so the address stops
-	// pointing at it.
+	// again instead of the garage. The edit forms start again from the saved
+	// car or service entry, and an edit of an entry that is gone opens the
+	// car's history. An entry for a car that is gone is replaced, so the
+	// address stops pointing at it.
 	function restoreReloadedPage() {
 		const state = globalThis.history?.state
 		if (!Object.hasOwn(CAR_PAGES, state?.page ?? "")) return
 		const car = ownCar(state.carId)
-		if (car) {
-			model.app.page = state.page
-			model.app.selectedCarId = state.carId
-			if (state.page === "carForm") fillCarInputs(car)
+		if (!car) {
+			dropCarPageEntry()
 			return
 		}
-		dropCarPageEntry()
+		model.app.page = state.page
+		model.app.selectedCarId = state.carId
+		if (state.page === "carForm") fillCarInputs(car)
+		if (state.page !== "serviceForm" || !state.entryId) return
+		const entry = ownEntry(car.id, state.entryId)
+		if (entry) {
+			fillServiceInputs(entry)
+			return
+		}
+		model.app.page = "history"
+		replaceWithHistory(car.id)
+	}
+
+	// The current history entry becomes the car's history, so the address
+	// of an edit whose service entry is gone stops pointing at it.
+	function replaceWithHistory(carId) {
+		globalThis.history?.replaceState(
+			{ page: "history", carId },
+			"",
+			`#${CAR_PAGES.history}-${carId}`
+		)
 	}
 
 	// The current history entry stops naming a car page, so a reload or a
@@ -860,16 +903,37 @@ export function createController({ model, view, i18n, config, languages }) {
 
 	function clearServiceEntryInputs() {
 		model.inputs.serviceEntry = structuredClone(blankInputs.serviceEntry)
+		model.inputs.editingId = null
 		model.inputs.errors = {}
 	}
 
+	// The service form as Edit opens it: the saved entry's values as the
+	// strings a field holds, and "" where the entry has nothing.
+	function fillServiceInputs(entry) {
+		clearServiceEntryInputs()
+		model.inputs.editingId = entry.id
+		for (const field of Object.keys(model.inputs.serviceEntry)) {
+			model.inputs.serviceEntry[field] = String(entry[field] ?? "")
+		}
+	}
+
+	// The entry with this id on the active profile's car `carId`, or null.
+	function ownEntry(carId, id) {
+		if (!ownCar(carId)) return null
+		return model.data.serviceEntries.find((e) => e.id === id && e.carId === carId) ?? null
+	}
+
 	// The service form was submitted. Errors keep the form open with what
-	// was typed, and focus goes to the first field with one. A saved entry
-	// raises the car's odometer when it reads higher, never lowers it, and
-	// the history opens unfiltered so the new entry shows.
+	// was typed, and focus goes to the first field with one. A new entry
+	// raises the car's mileage when it reads higher, never lowers it. An
+	// edited entry is updated in place and leaves the car's mileage as it
+	// is. Either way the history opens unfiltered, so the entry shows.
 	function saveServiceEntry() {
 		const car = ownCar(model.app.selectedCarId)
 		if (!car) return
+		const { editingId } = model.inputs
+		const edited = editingId && ownEntry(car.id, editingId)
+		if (editingId && !edited) return
 		const { entry, errors } = validateServiceEntry(model.inputs.serviceEntry, {
 			mileageMax: config.carMileageMax,
 		})
@@ -880,11 +944,27 @@ export function createController({ model, view, i18n, config, languages }) {
 			view.focusField(`service-${fields[0]}`)
 			return
 		}
-		model.data.serviceEntries.push({ id: crypto.randomUUID(), carId: car.id, ...entry })
-		car.mileage = Math.max(car.mileage, entry.mileage)
+		if (edited) Object.assign(edited, entry)
+		else {
+			model.data.serviceEntries.push({ id: crypto.randomUUID(), carId: car.id, ...entry })
+			car.mileage = Math.max(car.mileage, entry.mileage)
+		}
 		saveData(model.data)
 		model.app.historyFilter = "all"
 		leaveCarPage("serviceForm", "history")
+	}
+
+	// Confirm in an entry's delete dialog. The history is drawn again
+	// without it, and focus goes to the heading, since the entry's own
+	// buttons are gone. The car's mileage stays as it is.
+	function deleteServiceEntry(id) {
+		const entry = ownEntry(model.app.selectedCarId, id)
+		if (!entry) return
+		model.data.serviceEntries = model.data.serviceEntries.filter((e) => e !== entry)
+		saveData(model.data)
+		view.closeDialog(`delete-entry-${id}`)
+		render()
+		view.focusHeading()
 	}
 
 	// Focus stays on the select, which reads out the new filter.

@@ -305,21 +305,24 @@ export function createView({ header, main }, i18n, config) {
 			</div>
 			${
 				shown.length
-					? `<ul class="history-list" role="list">${shown.map((entry) => serviceHistoryEntry(entry, derived, t)).join("")}</ul>`
+					? `<ul class="history-list" role="list">${shown.map((entry) => serviceHistoryEntry(entry, derived, t)).join("")}</ul>
+						${shown.map((entry) => deleteEntryDialog(entry, derived, t)).join("")}`
 					: `<p class="history-empty text-muted-foreground">${esc(t(count ? "history.noMatches" : "history.empty"))}</p>`
 			}`
 	}
 
+	// The same form edits a saved entry while inputs.editingId names it.
 	function serviceFormPage(model, derived, t) {
 		const car = derived.selectedCar
 		if (!car) return carMissing(t)
+		const title = model.inputs.editingId ? "service.editTitle" : "service.formTitle"
 		const makeModel = `${car.make} ${car.model}`
 		const carName = car.nickname ? `${car.nickname} · ${makeModel}` : makeModel
 		const vars = { maxKm: new Intl.NumberFormat(derived.lang).format(config.carMileageMax) }
 		const field = (name, options) => serviceEntryField(model, t, name, { ...options, vars })
 		return `
 			<button class="btn btn-ghost car-back" type="button" data-action="cancel-service-entry">${backIcon()}<span>${esc(t("service.backToHistory"))}</span></button>
-			<h1 class="service-form-title" tabindex="-1">${esc(t("service.formTitle"))}</h1>
+			<h1 class="service-form-title" tabindex="-1">${esc(t(title))}</h1>
 			<p class="service-form-car text-muted-foreground">${esc(t("service.carSummary", { car: carName, year: car.year }))}</p>
 			<form class="split-form service-form" data-submit="save-service-entry" novalidate>
 				<div class="split-form-body stack">
@@ -395,9 +398,20 @@ export function createView({ header, main }, i18n, config) {
 			</div>`
 	}
 
+	// "Oil change from May 1, 2025": how the buttons and the delete dialog
+	// name one entry.
+	function entryName(entry, lang, t) {
+		return t("history.entryName", { title: entry.title, date: formatDate(entry.date, lang) })
+	}
+
+	// Edit and Delete name their entry for a screen reader, since every
+	// entry has a pair. Delete opens the entry's own dialog.
 	function serviceHistoryEntry(entry, derived, t) {
 		const km = new Intl.NumberFormat(derived.lang).format(entry.mileage)
 		const cost = formatMoney(entry.cost, derived.lang)
+		const name = entryName(entry, derived.lang, t)
+		const named = (label) =>
+			`<span>${esc(t(label))}<span class="sr-only"> ${esc(name)}</span></span>`
 		return `
 			<li class="history-entry">
 				<time class="history-date" datetime="${esc(entry.date)}">${esc(formatDate(entry.date, derived.lang))}</time>
@@ -411,7 +425,29 @@ export function createView({ header, main }, i18n, config) {
 					<p class="history-entry-cost">${esc(t("history.cost", { cost }))}</p>
 					${entry.notes ? `<p class="history-entry-notes text-muted-foreground">${esc(entry.notes)}</p>` : ""}
 				</div>
+				<div class="cluster history-entry-actions">
+					<button class="btn" type="button" data-action="edit-service-entry" data-id="${esc(entry.id)}">${editIcon()}${named("history.edit")}</button>
+					<button class="btn btn-danger" type="button" data-action="delete-service-entry" data-id="${esc(entry.id)}">${deleteIcon()}${named("history.delete")}</button>
+				</div>
 			</li>`
+	}
+
+	// The same native <dialog> as deleteDialog: focus starts on Cancel, and
+	// Cancel and Escape close it in the browser, which hands focus back to
+	// the entry's Delete. The dialogs sit after the list, so its headings
+	// are the entries' own.
+	function deleteEntryDialog(entry, derived, t) {
+		const id = `delete-entry-${esc(entry.id)}`
+		const name = entryName(entry, derived.lang, t)
+		return `
+			<dialog class="modal car-dialog" id="${id}" aria-labelledby="${id}-title" aria-describedby="${id}-text">
+				<h2 id="${id}-title">${esc(t("history.deleteDialog.title", { entry: name }))}</h2>
+				<p id="${id}-text" class="text-muted-foreground">${esc(t("history.deleteDialog.text"))}</p>
+				<div class="cluster car-dialog-actions">
+					<button class="btn btn-danger" type="button" data-action="confirm-delete-service-entry" data-id="${esc(entry.id)}">${esc(t("history.delete"))}</button>
+					<form method="dialog"><button class="btn" type="submit" autofocus>${esc(t("car.cancel"))}</button></form>
+				</div>
+			</dialog>`
 	}
 
 	// An EU-kontroll status as text with an icon, never colour alone. The
