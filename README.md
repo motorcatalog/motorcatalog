@@ -14,10 +14,10 @@ A digital service book for your car: log maintenance, repairs and costs, and kee
 Implemented so far:
 
 - **Local profiles:** create a profile on this device and keep each person's cars apart.
-- **Garage and car details:** add cars, then open a car to see its make, model, year, fuel, registration number, VIN, odometer and EU inspection date.
+- **Garage and car details:** add cars, then open a car to see its make, model, year, fuel, registration number, VIN, mileage and EU inspection date.
 - **Edit and delete cars:** change a car's details, or delete it with all its records after a confirmation.
 - **Service history:** view a car's service, repair and other records newest first, and filter by category.
-- **Register service:** record the category, work, date, odometer, cost, and optional workshop and notes. The car's odometer updates when a new record has a higher reading.
+- **Register service:** record the category, work, date, odometer, cost, and optional workshop and notes. The car's mileage updates when a new record has a higher reading.
 - **Cost total:** see the total spent on a car's service records from its details or service history.
 - **EU inspection:** set the next EU inspection date and see on the car card whether it is OK, due soon (within three months) or overdue. A reminder shows at the top of the garage three, two and one month before, then every week until it is done. Mark it as done, and the next date is suggested two years on.
 - **Export:** download every profile on this device, with its cars and service records, as one JSON file.

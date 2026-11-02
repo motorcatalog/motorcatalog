@@ -817,7 +817,7 @@ test("a nickname takes the title with make and model under it, and VIN and engin
 test("the stat cards show the odometer in km and the EU-kontroll date in the chosen language", () => {
 	const stats = (lang, car) =>
 		[...mount(carScreen({ lang, car })).main.querySelectorAll(".car-stat-card")].map(words)
-	assert.deepEqual(stats("en"), ["Odometer 184,000 km", "EU inspection Mar 1, 2027 OK"])
+	assert.deepEqual(stats("en"), ["Mileage 184,000 km", "EU inspection Mar 1, 2027 OK"])
 	const [odometer, inspection] = stats("nb")
 	assert.match(odometer, /184\s000 km$/)
 	assert.match(inspection, /1\. mars 2027 I orden$/)
@@ -1049,7 +1049,7 @@ test("service form errors sit under their fields and are tied to them, with what
 	assert.equal(words(main.querySelector("#service-title-error")), "Enter the type of work.")
 	assert.equal(
 		words(main.querySelector("#service-mileage-error")),
-		"Enter the odometer in whole km, from 0 to 10,000,000."
+		"Enter the mileage in whole km, from 0 to 10,000,000."
 	)
 	assert.equal(main.querySelector("#service-date").getAttribute("aria-invalid"), null)
 	assert.equal(main.querySelector("#service-category").value, "repair")
