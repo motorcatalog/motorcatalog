@@ -19,6 +19,7 @@ import {
 	euInspectionStatus,
 	euReminderShows,
 	exportFile,
+	highestServiceEntry,
 	loadData,
 	localDateString,
 	resolveCountry,
@@ -615,6 +616,37 @@ test("validateCar caps the odometer at 10 000 000 km", () => {
 	assert.deepEqual(validateCar({ ...TYPED, mileage: "10000001" }, RULES).errors, {
 		mileage: "car.error.mileage",
 	})
+})
+
+test("validateCar never takes an edited car below its highest service entry", () => {
+	const highestEntry = { mileage: 184000, date: "2026-03-14" }
+	const rules = { ...RULES, highestEntry }
+	assert.deepEqual(validateCar({ ...TYPED, mileage: "184000" }, rules).errors, {})
+	assert.deepEqual(validateCar({ ...TYPED, mileage: "190000" }, rules).errors, {})
+	assert.deepEqual(validateCar({ ...TYPED, mileage: "183999" }, rules).errors, {
+		mileage: "car.error.mileageBelowEntry",
+	})
+	// A mileage that isn't whole km gets the usual error first.
+	assert.deepEqual(validateCar({ ...TYPED, mileage: "abc" }, rules).errors, {
+		mileage: "car.error.mileage",
+	})
+})
+
+test("highestServiceEntry picks the entry with the most km, the newest on a tie", () => {
+	const at = (id, mileage, date) => ({ id, mileage, date })
+	assert.equal(highestServiceEntry([]), null)
+	assert.equal(
+		highestServiceEntry([at("a", 150000, "2026-05-01"), at("b", 170000, "2025-01-01")]).id,
+		"b"
+	)
+	assert.equal(
+		highestServiceEntry([at("a", 170000, "2025-01-01"), at("b", 170000, "2026-01-01")]).id,
+		"b"
+	)
+	assert.equal(
+		highestServiceEntry([at("a", 170000, "2026-01-01"), at("b", 170000, "2025-01-01")]).id,
+		"a"
+	)
 })
 
 test("typedCarInput gives nickname and engine a capital first letter, and leaves make and model alone", () => {
@@ -1396,6 +1428,46 @@ test("an invalid edit keeps the form open with its errors and changes nothing", 
 	assert.equal(storage.items[STORAGE_KEY], before)
 })
 
+test("an edit to a higher mileage shows on the car page and the garage right away", () => {
+	fakeHistory()
+	const { model, view } = boot(garageWith())
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	fillCar(view, { mileage: "200000" })
+	view.handlers["save-car"]()
+	assert.equal(view.derived.selectedCar.mileage, 200000)
+	view.handlers["back-garage"]()
+	assert.equal(view.derived.cars.find((c) => c.id === "c0").mileage, 200000)
+	assert.equal(model.data.cars[0].mileage, 200000)
+})
+
+test("an edit below the car's highest service entry is blocked with an error that names it", () => {
+	fakeHistory()
+	const storage = garageWith([
+		{ ...entryOn("a", "2026-01-10"), mileage: 160000 },
+		{ ...entryOn("b", "2026-02-10"), mileage: 175000 },
+		{ ...entryOn("x", "2026-03-10", { carId: "c1" }), mileage: 183000 },
+	])
+	const before = storage.items[STORAGE_KEY]
+	const { model, view } = boot(storage)
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	assert.equal(view.derived.carForm.highestEntry.id, "b")
+	fillCar(view, { mileage: "174999" })
+	view.handlers["save-car"]()
+	assert.deepEqual(model.inputs.errors, { mileage: "car.error.mileageBelowEntry" })
+	assert.deepEqual(view.fields, ["car-mileage"])
+	assert.equal(view.derived.carForm.highestEntry.id, "b") // the error names this entry
+	assert.equal(model.app.page, "carForm")
+	assert.equal(model.data.cars[0].mileage, 184000)
+	assert.equal(storage.items[STORAGE_KEY], before)
+	// Down to the highest entry is fine. Another car's entry doesn't count.
+	fillCar(view, { mileage: "175000" })
+	view.handlers["save-car"]()
+	assert.equal(model.data.cars[0].mileage, 175000)
+	assert.equal(model.app.page, "car")
+})
+
 test("Cancel on an edit returns to the car page without saving, and Add car still starts empty", () => {
 	const history = fakeHistory()
 	const storage = garageWith()
@@ -1589,6 +1661,53 @@ test("saving an edit updates the entry in place and returns to the unfiltered hi
 	view.handlers["register-service"]()
 	assert.deepEqual(model.inputs.serviceEntry, initialModel.inputs.serviceEntry)
 	assert.equal(model.inputs.editingId, null) // Register after an edit adds a new entry
+})
+
+test("an edited service entry with a higher mileage raises the car's mileage", () => {
+	fakeHistory()
+	const storage = garageWith([entryOn("a", "2026-01-10")])
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	editEntry(view, "a")
+	fillService(view, { mileage: "191000" })
+	view.handlers["save-service-entry"]()
+	assert.equal(model.data.serviceEntries[0].mileage, 191000)
+	assert.equal(model.data.cars[0].mileage, 191000)
+	assert.equal(model.data.cars[1].mileage, 184000) // only the entry's own car
+	assert.deepEqual(storedData(storage), model.data)
+})
+
+test("deleting the highest service entry leaves the car's mileage as it is", () => {
+	fakeHistory()
+	const storage = garageWith([{ ...entryOn("a", "2026-01-10"), mileage: 184000 }])
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	deleteEntry(view, "a")
+	assert.equal(model.data.serviceEntries.length, 0)
+	assert.equal(model.data.cars[0].mileage, 184000)
+})
+
+test("after a typo in the highest entry is fixed, the car can go down to the new highest", () => {
+	fakeHistory()
+	const storage = garageWith([
+		{ ...entryOn("a", "2026-01-10"), mileage: 170000 },
+		{ ...entryOn("b", "2026-02-10"), mileage: 1840000 },
+	])
+	const data = storedData(storage)
+	data.cars[0].mileage = 1840000 // the typo raised the car too
+	storage.items[STORAGE_KEY] = JSON.stringify(data)
+	const { model, view } = boot(storage)
+	openHistory(view, "c0")
+	editEntry(view, "b")
+	fillService(view, { mileage: "184000" })
+	view.handlers["save-service-entry"]()
+	assert.equal(model.data.cars[0].mileage, 1840000) // lowering an entry never lowers the car
+	openCar(view, "c0")
+	view.handlers["edit-car"]()
+	fillCar(view, { mileage: "184000" })
+	view.handlers["save-car"]()
+	assert.deepEqual(model.inputs.errors, {})
+	assert.equal(model.data.cars[0].mileage, 184000)
 })
 
 test("an invalid edit shows the same errors as registering and changes nothing", () => {

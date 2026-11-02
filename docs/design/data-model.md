@@ -211,7 +211,9 @@ The controller fixes each car field as it is typed, so the user sees the rule at
 
 ### Mileage
 
-`car.mileage` is set when the car is added and can be edited. When a service entry or a finished task has a higher km, the controller raises `car.mileage` to match. It never lowers it by itself.
+`car.mileage` is set when the car is added and can be edited. When a service entry (new or edited) or a finished task has a higher km, the controller raises `car.mileage` to match. It never lowers it by itself, so deleting or lowering an entry leaves the car as it is.
+
+Edit car can lower the mileage, but never below the car's highest service entry. The error names that entry's km and date. A typo in an entry is fixed by editing the entry, and after that the car can go down to the new highest entry. Decided at Sprint 4 planning (02.11.2026).
 
 ### Repeating tasks
 

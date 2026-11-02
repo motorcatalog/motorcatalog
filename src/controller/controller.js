@@ -191,8 +191,13 @@ export function carFormHints(inputs, lang) {
 
 // The typed car form as a car to store, and an error text key per field
 // that is wrong. Errors come in form order, so the first one is the field
-// to focus. Empty optional text is stored as null, never "".
-export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax, mileageMax }) {
+// to focus. Empty optional text is stored as null, never "". An edited
+// car can't go below `highestEntry`, its service entry with the most km:
+// the error names that entry, so a typo there is fixed on the entry.
+export function validateCar(
+	inputs,
+	{ fuels, nicknameMax, yearMin, yearMax, mileageMax, highestEntry = null }
+) {
 	const optional = (value) => value.trim() || null
 	const car = {
 		nickname: optional(inputs.nickname),
@@ -218,7 +223,12 @@ export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax, mile
 			(plateFits(car.regNumber, PLATES[car.regCountry]) || "car.error.regNumberLength"),
 		vin: car.vin === null || VIN.test(car.vin),
 		fuel: fuels.includes(car.fuel),
-		mileage: WHOLE_NUMBER.test(inputs.mileage.trim()) && car.mileage <= mileageMax,
+		mileage:
+			WHOLE_NUMBER.test(inputs.mileage.trim()) &&
+			car.mileage <= mileageMax &&
+			(highestEntry === null ||
+				car.mileage >= highestEntry.mileage ||
+				"car.error.mileageBelowEntry"),
 		// A past date is fine: the car is then overdue.
 		euInspectionDue: car.euInspectionDue === null || isValidDate(car.euInspectionDue),
 	}
@@ -229,6 +239,22 @@ export function validateCar(inputs, { fuels, nicknameMax, yearMin, yearMax, mile
 			.map(([field, ok]) => [field, ok || `car.error.${field}`])
 	)
 	return { car, errors }
+}
+
+// The entry with the most km among `entries`, the newest on a tie, or null
+// when there is none. The car's mileage may not go below it.
+export function highestServiceEntry(entries) {
+	let highest = null
+	for (const entry of entries) {
+		if (
+			!highest ||
+			entry.mileage > highest.mileage ||
+			(entry.mileage === highest.mileage && entry.date > highest.date)
+		) {
+			highest = entry
+		}
+	}
+	return highest
 }
 
 // Today as YYYY-MM-DD in the user's own time zone, the format a date input
@@ -592,7 +618,14 @@ export function createController({ model, view, i18n, config, languages }) {
 			)
 		}
 		if (model.app.page === "serviceForm") derived.today = today
-		if (model.app.page === "carForm") derived.carForm = carFormHints(model.inputs.car, derived.lang)
+		if (model.app.page === "carForm") {
+			const { editingId } = model.inputs
+			derived.carForm = {
+				...carFormHints(model.inputs.car, derived.lang),
+				// What the mileage error names when an edit goes below it.
+				highestEntry: editingId ? highestEntryOn(editingId) : null,
+			}
+		}
 		view.render(model, derived)
 		syncHeader(derived)
 		syncDocument(derived)
@@ -669,8 +702,8 @@ export function createController({ model, view, i18n, config, languages }) {
 	// The car form was submitted. A car with errors stays on the form with
 	// what was typed, and focus goes to the first field with an error. A
 	// new car opens the garage. An edited car is updated in place and its
-	// page opens again. The odometer may go down here: an edit is the one
-	// way to correct it.
+	// page opens again. An edit may lower the mileage, but never below the
+	// car's highest service entry.
 	function saveCar() {
 		const profileId = model.data.activeProfileId
 		if (!profileId) return
@@ -683,6 +716,7 @@ export function createController({ model, view, i18n, config, languages }) {
 			yearMin: config.carYearMin,
 			yearMax: new Date().getFullYear() + 1,
 			mileageMax: config.carMileageMax,
+			highestEntry: edited ? highestEntryOn(edited.id) : null,
 		})
 		const fields = Object.keys(errors)
 		if (fields.length > 0) {
@@ -917,6 +951,10 @@ export function createController({ model, view, i18n, config, languages }) {
 		}
 	}
 
+	function highestEntryOn(carId) {
+		return highestServiceEntry(model.data.serviceEntries.filter((e) => e.carId === carId))
+	}
+
 	// The entry with this id on the active profile's car `carId`, or null.
 	function ownEntry(carId, id) {
 		if (!ownCar(carId)) return null
@@ -925,9 +963,9 @@ export function createController({ model, view, i18n, config, languages }) {
 
 	// The service form was submitted. Errors keep the form open with what
 	// was typed, and focus goes to the first field with one. A new entry
-	// raises the car's mileage when it reads higher, never lowers it. An
-	// edited entry is updated in place and leaves the car's mileage as it
-	// is. Either way the history opens unfiltered, so the entry shows.
+	// is added and an edited one is updated in place. Either way the car's
+	// mileage is raised when the entry reads higher, never lowered, and the
+	// history opens unfiltered, so the entry shows.
 	function saveServiceEntry() {
 		const car = ownCar(model.app.selectedCarId)
 		if (!car) return
@@ -945,10 +983,8 @@ export function createController({ model, view, i18n, config, languages }) {
 			return
 		}
 		if (edited) Object.assign(edited, entry)
-		else {
-			model.data.serviceEntries.push({ id: crypto.randomUUID(), carId: car.id, ...entry })
-			car.mileage = Math.max(car.mileage, entry.mileage)
-		}
+		else model.data.serviceEntries.push({ id: crypto.randomUUID(), carId: car.id, ...entry })
+		car.mileage = Math.max(car.mileage, entry.mileage)
 		saveData(model.data)
 		model.app.historyFilter = "all"
 		leaveCarPage("serviceForm", "history")
