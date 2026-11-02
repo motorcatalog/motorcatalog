@@ -234,15 +234,27 @@ test("Edit opens the filled form, and Save updates the car and returns to its pa
 	assert.equal(await value("#car-fuel"), "diesel")
 	assert.equal(await value("#car-mileage"), "184000")
 
+	// Below the car's highest service entry (180 000 km) is blocked.
 	await page.click("#car-mileage", { count: 3 })
-	await page.keyboard.type("150000") // lower than before, which only an edit allows
+	await page.keyboard.type("150000")
+	await page.click("form button[type='submit']")
+	await page.waitForSelector("#car-mileage-error")
+	assert.equal(await focusedId(page), "car-mileage")
+	assert.match(
+		await page.$eval("#car-mileage-error", (el) => el.textContent),
+		/entry at 180,000 km from Jan 10, 2026/
+	)
+	assert.equal((await saved(page)).cars[0].mileage, 184000)
+
+	await page.click("#car-mileage", { count: 3 })
+	await page.keyboard.type("180000") // lower than before, down to that entry
 	await page.click("form button[type='submit']")
 	await waitForH1(page, "Volvo V70")
 	assert.equal(await focusedId(page), "car-detail-title")
 	assert.equal(new URL(page.url()).hash, "#car-c0")
-	assert.equal((await saved(page)).cars[0].mileage, 150000)
+	assert.equal((await saved(page)).cars[0].mileage, 180000)
 	const odometer = await page.$eval("#main .car-stat-card", (el) => el.textContent)
-	assert.match(odometer, /150,000/)
+	assert.match(odometer, /180,000/)
 	await page.browserContext().close()
 })
 

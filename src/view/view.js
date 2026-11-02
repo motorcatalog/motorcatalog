@@ -335,7 +335,8 @@ export function createView({ header, main }, i18n, config) {
 					${field("mileage", {
 						type: "number",
 						required: true,
-						attrs: `min="0" max="${config.carMileageMax}" step="1" inputmode="numeric"`,
+						// The car's mileage now, the lowest a new service usually reads.
+						attrs: `min="0" max="${config.carMileageMax}" step="1" inputmode="numeric" placeholder="${esc(t("service.placeholder.mileage", { km: car.mileage }))}"`,
 					})}
 					${field("cost", {
 						type: "number",
@@ -613,7 +614,7 @@ export function createView({ header, main }, i18n, config) {
 	// One labelled field. Every keystroke goes to the controller as
 	// "car-input" with the field's name, so the form needs no redraw.
 	function carField(model, derived, t, { name, type = "text", required = false, attrs = "" }) {
-		const { country, plate } = derived.carForm
+		const { country, plate, highestEntry } = derived.carForm
 		const id = `car-${name}`
 		// A country is kept as its code once it matches, and shown by name.
 		const value = name === "regCountry" && country ? country.name : model.inputs.car[name]
@@ -643,6 +644,8 @@ export function createView({ header, main }, i18n, config) {
 			country: country?.name,
 			plateMin: plate?.min,
 			plateMax: plate?.max,
+			entryKm: highestEntry && new Intl.NumberFormat(derived.lang).format(highestEntry.mileage),
+			entryDate: highestEntry && formatDate(highestEntry.date, derived.lang),
 		}
 		return `
 			<div class="field">

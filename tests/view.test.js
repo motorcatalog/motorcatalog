@@ -606,6 +606,30 @@ test("the car form keeps what was typed and shows each error under its field", (
 	assert.equal(main.querySelector("#car-model").hasAttribute("aria-invalid"), false)
 })
 
+test("an edit below the highest service entry names that entry's km and date in its language", () => {
+	for (const [lang, km, date] of [
+		["en", "175,000", "Feb 10, 2026"],
+		["nb", "175 000", "10. feb. 2026"],
+	]) {
+		const form = screen({
+			chosen: { lang },
+			page: "carForm",
+			profiles: ["Malin"],
+			active: 0,
+			carErrors: { mileage: "car.error.mileageBelowEntry" },
+		})
+		form.derived.carForm.highestEntry = { mileage: 175000, date: "2026-02-10" }
+		const { main } = mount(form)
+		assert.equal(
+			text(main.querySelector("#car-mileage-error")),
+			bundles[lang]["car.error.mileageBelowEntry"]
+				.replaceAll("{entryKm}", km)
+				.replace("{entryDate}", date),
+			lang
+		)
+	}
+})
+
 test("every car field but fuel and the date shows a short example inside it until something is typed", () => {
 	const { main } = mount(screen({ ...en, page: "carForm", profiles: ["Malin"], active: 0 }))
 	assert.equal(main.querySelector("#car-euInspectionDue").hasAttribute("placeholder"), false)
@@ -1034,6 +1058,7 @@ test("the service form has every field in order, labelled, with optional ones ma
 	assert.equal(main.querySelector("#service-date").max, "2026-10-26")
 	assert.equal(main.querySelector("#service-date").getAttribute("lang"), null)
 	assert.equal(main.querySelector("#service-mileage").max, String(config.carMileageMax))
+	assert.equal(main.querySelector("#service-mileage").placeholder, "e.g. 184000") // the car's mileage
 	assert.equal(main.querySelector("form").dataset.submit, "save-service-entry")
 })
 
